@@ -17,10 +17,11 @@ interface TableData {
     w: string;
     h: string;
     seats: number;
-    status: 'free' | 'occupied' | 'waiting_payment';
+    status: 'free' | 'occupied' | 'waiting_payment' | 'ordered' | 'eating' | 'cleaning';
     last_activity_at: string | null;
     is_label?: boolean;
     label_name?: string;
+    occupants?: any[];
 }
 
 const DEFAULT_TABLES: TableData[] = [
@@ -99,17 +100,17 @@ export function AdminTables() {
                     status: t.status || 'free',
                     last_activity_at: t.last_activity_at,
                     is_label: t.is_label,
-                    label_name: t.label_name
+                    label_name: t.label_name,
+                    occupants: t.occupants || []
                 })));
             }
 
-            // 2. Fetch Orders (to check occupation)
+            // 2. Fetch Orders (to check occupation) - Only active orders
             const { data: ordersData, error: ordersError } = await supabase
                 .from('orders')
                 .select('*, order_items(*, menu_items(*))')
                 .eq('establishment_id', currentEstId)
-                .neq('status', 'cancelled')
-                .neq('status', 'archived');
+                .not('status', 'in', '("cancelled", "archived", "completed")');
             if (ordersError) throw ordersError;
             setOrders(ordersData || []);
 
@@ -147,7 +148,8 @@ export function AdminTables() {
                 status: t.status,
                 last_activity_at: t.last_activity_at,
                 is_label: t.is_label,
-                label_name: t.label_name
+                label_name: t.label_name,
+                occupants: t.occupants
             }));
 
             const { error } = await supabase.from('restaurant_tables').upsert(tablesToSave);
@@ -297,7 +299,8 @@ export function AdminTables() {
             lastOrderAt: lastOrder,
             occupiedMins,
             inactiveMins,
-            hasAlert: inactiveMins > 15 // Alert if more than 15 mins without new orders
+            hasAlert: inactiveMins > 15, // Alert if more than 15 mins without new orders
+            orderCount: tableOrders.length
         };
     };
 
@@ -305,8 +308,19 @@ export function AdminTables() {
         const table = tables.find(t => t.id === tableId);
         if (!table) return 'free';
 
+        const metrics = getTableMetrics(tableId);
+
+        // Extended status logic
+        if (table.status === 'occupied') {
+            if (metrics) {
+                if (metrics.inactiveMins > 20) return 'eating';
+                return 'ordered';
+            }
+            return 'occupied';
+        }
+
         // Timeout logic: 40 minutes [V2 FEATURE]
-        if (table.status === 'occupied' && table.last_activity_at) {
+        if (table.status !== 'free' && table.last_activity_at) {
             const lastActivity = new Date(table.last_activity_at).getTime();
             const diff = (currentTime - lastActivity) / 60000;
             if (diff > 40) return 'timeout';
@@ -323,7 +337,8 @@ export function AdminTables() {
                 .from('restaurant_tables')
                 .update({
                     status: 'free',
-                    last_activity_at: null
+                    last_activity_at: null,
+                    occupants: []
                 })
                 .eq('id', tableId);
 
@@ -352,7 +367,9 @@ export function AdminTables() {
     };
 
     const getTableParticipants = () => {
-        return [];
+        if (!selectedTable) return [];
+        const table = tables.find(t => t.id === selectedTable);
+        return table?.occupants || [];
     };
 
     const getServiceType = (tableId: string) => {
@@ -512,7 +529,7 @@ export function AdminTables() {
                     {/* Tables & Labels */}
                     {tables.map(table => {
                         const metrics = getTableMetrics(table.id);
-                        const isOccupied = !!metrics;
+                        const isOccupied = table.status !== 'free';
 
                         if (table.is_label) {
                             const isDivider = table.shape === 'divider_v' || table.shape === 'divider_h';
@@ -558,7 +575,11 @@ export function AdminTables() {
                                 className={`absolute flex flex-col items-center justify-center transition-all duration-300
                                     ${isEditing ? 'cursor-move hover:ring-2 hover:ring-black/20 hover:scale-105 z-40' : 'cursor-pointer hover:scale-105 hover:bg-black/5'}
                                     ${isOccupied
-                                        ? 'bg-red-500/10 border-2 border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
+                                        ? getTableStatus(table.id) === 'ordered'
+                                            ? 'bg-orange-500/10 border-2 border-orange-500/80 shadow-[0_0_15px_rgba(249,115,22,0.15)]'
+                                            : getTableStatus(table.id) === 'eating'
+                                                ? 'bg-blue-500/10 border-2 border-blue-500/80 shadow-[0_0_15px_rgba(59,130,246,0.15)]'
+                                                : 'bg-red-500/10 border-2 border-red-500/80 shadow-[0_0_15px_rgba(239,68,68,0.15)]'
                                         : 'bg-emerald-500/5 border-2 border-emerald-600/80 shadow-sm'}
                                     ${table.shape === 'round' ? 'rounded-full' : 'rounded-[2px]'}
                                     ${metrics?.hasAlert ? 'ring-4 ring-red-500/30 animate-pulse' : ''}
@@ -573,7 +594,11 @@ export function AdminTables() {
                             >
                                 <span className={`
                                     font-mono text-xs font-bold select-none pointer-events-none tracking-widest
-                                    ${isOccupied ? 'text-red-700' : 'text-emerald-700'}
+                                    ${isOccupied
+                                        ? getTableStatus(table.id) === 'ordered' ? 'text-orange-700'
+                                            : getTableStatus(table.id) === 'eating' ? 'text-blue-700'
+                                                : 'text-red-700'
+                                        : 'text-emerald-700'}
                                 `}>
                                     {table.id}
                                 </span>
@@ -609,14 +634,18 @@ export function AdminTables() {
                     <div className="glass-morphism border-b border-border/20 p-6 sm:p-8 flex items-center justify-between relative overflow-hidden">
                         {/* Status Badge */}
                         <div className={`absolute top-0 right-0 px-6 py-2 rounded-bl-3xl font-bold text-[10px] uppercase tracking-[0.2em] shadow-sm z-20
-                            ${getTableStatus(selectedTable || '') === 'occupied' ? 'bg-red-500 text-white' :
-                                getTableStatus(selectedTable || '') === 'waiting_payment' ? 'bg-orange-500 text-white' :
-                                    getTableStatus(selectedTable || '') === 'timeout' ? 'bg-purple-600 text-white animate-pulse' :
-                                        'bg-emerald-500 text-white'}`}>
-                            {getTableStatus(selectedTable || '') === 'occupied' ? 'Ocupada' :
-                                getTableStatus(selectedTable || '') === 'waiting_payment' ? 'Aguardando Maquininha' :
-                                    getTableStatus(selectedTable || '') === 'timeout' ? 'Inativa (40m+)' :
-                                        'Livre'}
+                                ${getTableStatus(selectedTable || '') === 'ordered' ? 'bg-orange-500 text-white' :
+                                getTableStatus(selectedTable || '') === 'eating' ? 'bg-blue-500 text-white' :
+                                    getTableStatus(selectedTable || '') === 'occupied' ? 'bg-red-500 text-white' :
+                                        getTableStatus(selectedTable || '') === 'waiting_payment' ? 'bg-amber-500 text-white' :
+                                            getTableStatus(selectedTable || '') === 'timeout' ? 'bg-purple-600 text-white animate-pulse' :
+                                                'bg-emerald-500 text-white'}`}>
+                            {getTableStatus(selectedTable || '') === 'ordered' ? 'Pedido Feito' :
+                                getTableStatus(selectedTable || '') === 'eating' ? 'Comendo' :
+                                    getTableStatus(selectedTable || '') === 'occupied' ? 'Ocupada' :
+                                        getTableStatus(selectedTable || '') === 'waiting_payment' ? 'Pagamento' :
+                                            getTableStatus(selectedTable || '') === 'timeout' ? 'Inativa (40m+)' :
+                                                'Livre'}
                         </div>
 
                         <div className="flex items-center gap-6 z-10">
@@ -893,6 +922,49 @@ export function AdminTables() {
             </Dialog>
 
             {/* Table QR Modal Removed - Embedded above */}
+
+            {/* Bottom Summary Bar */}
+            {!isEditing && (
+                <div className="fixed bottom-8 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-8 duration-700">
+                    <div className="bg-zinc-900/90 backdrop-blur-2xl border border-white/10 rounded-full px-8 py-4 shadow-[0_20px_50px_rgba(0,0,0,0.3)] flex items-center gap-10">
+                        <div className="flex items-center gap-3 border-r border-white/10 pr-10">
+                            <div className="w-10 h-10 rounded-xl bg-emerald-500/20 flex items-center justify-center">
+                                <Armchair className="w-5 h-5 text-emerald-500" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Livres</span>
+                                <span className="text-xl font-black text-white leading-none tracking-tighter">
+                                    {tables.filter(t => !t.is_label && t.status === 'free').length}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 border-r border-white/10 pr-10">
+                            <div className="w-10 h-10 rounded-xl bg-red-500/20 flex items-center justify-center">
+                                <Users className="w-5 h-5 text-red-500" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Em Atendimento</span>
+                                <span className="text-xl font-black text-white leading-none tracking-tighter">
+                                    {tables.filter(t => !t.is_label && t.status !== 'free').length}
+                                </span>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-xl bg-orange-500/20 flex items-center justify-center">
+                                <UtensilsCrossed className="w-5 h-5 text-orange-500" />
+                            </div>
+                            <div className="flex flex-col">
+                                <span className="text-[10px] font-black text-white/40 uppercase tracking-widest leading-none mb-1">Pedidos Ativos</span>
+                                <span className="text-xl font-black text-white leading-none tracking-tighter">
+                                    {orders.length}
+                                </span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

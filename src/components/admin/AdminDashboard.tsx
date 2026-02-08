@@ -97,10 +97,18 @@ export function AdminDashboard() {
                     totalEstimatedProfit += profit;
                 });
 
+                // 2. Occupied Tables - Real Database Count
+                const { data: activeTablesData } = await supabase
+                    .from('restaurant_tables')
+                    .select('id')
+                    .neq('status', 'free');
+
+                const dbActiveTablesCount = activeTablesData?.length || 0;
+
                 setStats({
                     totalRevenue,
                     totalOrders: orders.length,
-                    activeTables: activeTablesCount,
+                    activeTables: dbActiveTablesCount,
                     alacarteTicket: alacarteOrdersCount > 0 ? alacarteRevenue / alacarteOrdersCount : 0,
                     estimatedProfit: totalEstimatedProfit
                 });
@@ -185,9 +193,9 @@ export function AdminDashboard() {
     }, []);
 
     const cards = [
-        { label: 'Faturamento Total', value: `R$ ${stats.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20', subLabel: '+12.5% vs anterior', subColor: 'text-emerald-600' },
-        { label: 'Lucro Est. (Bruto)', value: `R$ ${stats.estimatedProfit.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: Target, color: 'text-emerald-600', bg: 'bg-emerald-100/50', border: 'border-emerald-200', subLabel: 'Margem média 65%', subColor: 'text-muted-foreground' },
-        { label: 'Pedidos de Hoje', value: stats.totalOrders, icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-100/50', border: 'border-blue-200', subLabel: 'Fluxo em tempo real', subColor: 'text-muted-foreground' },
+        { label: 'Em Atendimento', value: stats.activeTables, icon: Users, color: 'text-red-600', bg: 'bg-red-100/50', border: 'border-red-200', subLabel: 'Mesas ocupadas agora', subColor: 'text-muted-foreground' },
+        { label: 'Faturamento de Hoje', value: `R$ ${stats.totalRevenue.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`, icon: DollarSign, color: 'text-primary', bg: 'bg-primary/10', border: 'border-primary/20', subLabel: '+12.5% vs ontem', subColor: 'text-emerald-600' },
+        { label: 'Pedidos Hoje', value: stats.totalOrders, icon: ShoppingBag, color: 'text-blue-600', bg: 'bg-blue-100/50', border: 'border-blue-200', subLabel: 'Fluxo em tempo real', subColor: 'text-muted-foreground' },
         { label: 'Ticket Médio', value: `R$ ${(stats.totalOrders > 0 ? stats.totalRevenue / stats.totalOrders : 0).toFixed(2)}`, icon: TrendingUp, color: 'text-purple-600', bg: 'bg-purple-100/50', border: 'border-purple-200', subLabel: '-2.1% agora', subColor: 'text-red-500' },
     ];
 

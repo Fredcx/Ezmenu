@@ -4,6 +4,7 @@ import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { LanguageSelector } from './LanguageSelector';
+import { BrandingLogo } from './BrandingLogo';
 import { toast } from 'sonner';
 
 interface LandingScreenProps {
@@ -134,7 +135,13 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                 .from('restaurant_tables')
                 .update({
                     status: 'occupied',
-                    last_activity_at: new Date().toISOString()
+                    last_activity_at: new Date().toISOString(),
+                    occupants: [{
+                        name: localStorage.getItem('ez_menu_client_name') || 'Cliente',
+                        email: localStorage.getItem('ez_menu_client_email') || '',
+                        type: 'rodizio', // Default for now
+                        joined_at: new Date().toISOString()
+                    }]
                 })
                 .eq('id', tableName);
 
@@ -174,14 +181,10 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
             <div className="relative z-10 min-h-full flex flex-col">
                 <div className="pt-12 pb-6 px-6 text-center">
                     <div className="inline-block mb-6 animate-in fade-in zoom-in duration-1000">
-                        <div className="w-32 h-32 rounded-[2.5rem] bg-white flex items-center justify-center relative shadow-premium border border-white/40 overflow-hidden">
-                            {establishment?.logo_url ? (
-                                <img src={establishment.logo_url} alt={establishment.name} className="w-full h-full object-contain p-4" />
-                            ) : (
-                                <Fish className="w-16 h-16 text-primary drop-shadow-sm" />
-                            )}
+                        <div className="relative flex flex-col items-center">
+                            <BrandingLogo variant="dark" className="w-32 h-32" showText={false} />
                             {hasTable && tableName && (
-                                <div className="absolute -bottom-3 bg-primary text-primary-foreground px-5 py-2 rounded-2xl text-[10px] font-black shadow-lg shadow-primary/30 tracking-[0.2em] uppercase border-2 border-background">
+                                <div className="absolute -bottom-3 bg-primary text-primary-foreground px-5 py-2 rounded-2xl text-[10px] font-black shadow-lg shadow-primary/30 tracking-[0.2em] uppercase border-2 border-background z-20">
                                     Mesa {tableName}
                                 </div>
                             )}
@@ -259,11 +262,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
 
                 {/* Footer Branding */}
                 <div className="py-8 pb-12 flex flex-col items-center justify-center opacity-30 select-none grayscale cursor-default hover:grayscale-0 hover:opacity-100 transition-all duration-700 mt-auto">
-                    <p className="text-[10px] font-black uppercase tracking-[0.4em] mb-4">Powered by</p>
-                    <div className="flex items-center gap-2">
-                        <Fish className="w-5 h-5 text-primary" />
-                        <span className="text-xl font-black italic tracking-tighter">EZ MENU</span>
-                    </div>
+                    <BrandingLogo variant="dark" className="w-12 h-12" showText={true} />
                 </div>
             </div>
         </div>

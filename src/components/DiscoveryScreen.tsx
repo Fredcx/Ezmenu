@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { Search, MapPin, Star, Clock, ChefHat, ArrowRight, Users, Armchair, Calendar, X, Loader2, Martini, Fish, Pizza, Coffee, GlassWater, Music, Guitar, Compass } from 'lucide-react';
 import { toast } from 'sonner';
+import { BrandingLogo } from './BrandingLogo';
 
 interface Establishment {
     id: string;
@@ -140,11 +141,8 @@ export function DiscoveryScreen() {
         <div className="min-h-screen bg-[#FDFBF7] selection:bg-orange-500/20 pb-20">
             {/* Dark Fixed Header */}
             <header className="fixed top-0 left-0 right-0 h-20 bg-black z-[100] flex items-center justify-between px-8 md:px-16 border-b border-white/5 shadow-2xl">
-                <div className="flex items-center gap-3 group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-                    <div className="w-10 h-10 bg-white rounded-xl flex items-center justify-center group-hover:rotate-12 transition-transform duration-500">
-                        <Fish className="w-6 h-6 text-black" />
-                    </div>
-                    <span className="text-2xl font-black italic tracking-tighter text-white">EZ MENU</span>
+                <div className="flex items-center group cursor-pointer" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
+                    <BrandingLogo variant="light" layout="horizontal" showText={false} className="scale-150 ml-4" />
                 </div>
 
                 <div className="hidden md:flex items-center gap-10">
@@ -316,12 +314,7 @@ export function DiscoveryScreen() {
             {/* Platform Branding Footer */}
             <footer className="bg-black py-20 px-8">
                 <div className="max-w-7xl mx-auto flex flex-col items-center gap-10">
-                    <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-white rounded-2xl flex items-center justify-center">
-                            <Fish className="w-7 h-7 text-black" />
-                        </div>
-                        <span className="text-4xl font-black italic tracking-tighter text-white">EZ MENU</span>
-                    </div>
+                    <BrandingLogo variant="light" layout="horizontal" showText={false} className="scale-[2.5]" />
                     <div className="flex gap-10 text-white/40 text-[10px] font-black uppercase tracking-widest">
                         <button className="hover:text-white transition-colors">Termos de Uso</button>
                         <button className="hover:text-white transition-colors">Privacidade</button>

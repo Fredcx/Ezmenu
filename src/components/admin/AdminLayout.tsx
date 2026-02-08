@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
 import { LayoutDashboard, UtensilsCrossed, Armchair, LogOut, Menu, Bell, CreditCard, Package, ChefHat, TrendingDown, TrendingUp, Globe, Users, Calendar, Settings, Store } from 'lucide-react';
+import { BrandingLogo } from '@/components/BrandingLogo';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
 
@@ -162,12 +163,7 @@ export const AdminLayout = () => {
             {/* Sidebar Desktop */}
             <aside className="hidden md:flex w-72 flex-col bg-white border-r border-border/40 h-full shadow-premium relative z-50">
                 <div className="p-8 border-b border-border/20">
-                    <h1 className="text-2xl font-black text-primary flex flex-col uppercase tracking-tighter italic leading-none">
-                        Ez Menu
-                        <span className="text-foreground text-[9px] font-black uppercase tracking-[0.3em] mt-1 opacity-40 not-italic">
-                            Executive Suite
-                        </span>
-                    </h1>
+                    <BrandingLogo variant="dark" className="w-20 h-20" />
                 </div>
 
                 <nav className="flex-1 p-6 space-y-1.5 overflow-y-auto no-scrollbar">
