@@ -145,7 +145,7 @@ export function DiscoveryScreen() {
                     <BrandingLogo variant="light" layout="horizontal" showText={false} className="scale-150 ml-4" />
                 </div>
 
-                <div className="hidden md:flex items-center gap-10">
+                <div className="flex items-center gap-3 md:gap-10">
                     <button
                         onClick={() => {
                             const hasAuth = localStorage.getItem('ez_menu_access') === 'granted';
@@ -156,13 +156,13 @@ export function DiscoveryScreen() {
                                 navigate('/reservations');
                             }
                         }}
-                        className="text-white/70 hover:text-white text-xs font-black uppercase tracking-widest transition-colors"
+                        className="text-white/70 hover:text-white text-[10px] md:text-xs font-black uppercase tracking-widest transition-colors"
                     >
                         Minhas Reservas
                     </button>
                     <button
                         onClick={() => navigate('/login')}
-                        className="bg-[#ED1B2E] text-white px-8 py-3 rounded-full text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-red-500/20 hover:scale-105 active:scale-95 transition-all"
+                        className="bg-[#ED1B2E] text-white px-4 md:px-8 py-2 md:py-3 rounded-full text-[10px] md:text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-red-500/20 hover:scale-105 active:scale-95 transition-all"
                     >
                         Acessar
                     </button>

@@ -96,7 +96,7 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                 .upsert({
                     email: email.trim().toLowerCase(),
                     full_name: name.trim(),
-                    role: 'client',
+                    role: 'customer',
                     establishment_id: establishmentId || null
                 }, { onConflict: 'email' });
 

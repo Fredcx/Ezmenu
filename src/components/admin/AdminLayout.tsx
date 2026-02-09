@@ -31,7 +31,7 @@ export const AdminLayout = () => {
                 .eq('id', session.user.id)
                 .single();
 
-            const role = profile?.role || 'client';
+            const role = profile?.role || 'customer';
             setUserRole(role);
 
             // Access Control Logic
