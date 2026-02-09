@@ -324,15 +324,16 @@ export function AdminTables() {
         const tableOrders = orders.filter(o => o.table_id === tableId && o.status !== 'cancelled' && o.status !== 'archived');
 
         // Base time: when they sat down (last_activity_at is updated when occupying)
-        const satDownAt = table.last_activity_at ? new Date(table.last_activity_at).getTime() : Date.now();
-        const occupiedMins = Math.floor((currentTime - satDownAt) / 60000);
+        const satDownAt = table.last_activity_at ? new Date(table.last_activity_at).getTime() : currentTime;
+        const durationMs = Math.max(0, currentTime - satDownAt);
+        const occupiedMins = Math.floor(durationMs / 60000);
 
         // Inactivity time: since last order OR since they sat down if no orders
         const lastOrderAt = tableOrders.length > 0
             ? Math.max(...tableOrders.map(o => new Date(o.created_at).getTime()))
             : satDownAt;
 
-        const inactiveMins = Math.floor((currentTime - lastOrderAt) / 60000);
+        const inactiveMins = Math.floor(Math.max(0, currentTime - lastOrderAt) / 60000);
 
         return {
             occupiedSince: satDownAt,
@@ -657,7 +658,7 @@ export function AdminTables() {
                                     <div className="absolute -bottom-6 left-1/2 -translate-x-1/2 whitespace-nowrap">
                                         <div className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-1 shadow-sm ${metrics.hasAlert ? 'bg-red-600 text-white animate-bounce' : 'bg-white text-muted-foreground border border-border'}`}>
                                             <Clock className="w-2.5 h-2.5" />
-                                            {metrics.occupiedMins}m
+                                            {formatDuration(Math.max(0, currentTime - (metrics.occupiedSince || currentTime)))}
                                         </div>
                                     </div>
                                 )}
@@ -709,7 +710,7 @@ export function AdminTables() {
                             <div>
                                 <DialogTitle className="text-3xl font-bold mb-1">Mesa {selectedTable}</DialogTitle>
                                 <DialogDescription className="text-sm flex flex-col gap-1">
-                                    {getTableStatus(selectedTable || '') === 'occupied' ? (
+                                    {['occupied', 'ordered', 'eating', 'timeout', 'waiting_payment'].includes(getTableStatus(selectedTable || '')) ? (
                                         <>
                                             <div className="flex items-center gap-2 text-red-600 font-bold uppercase tracking-wider text-[10px]">
                                                 <UtensilsCrossed className="w-3 h-3" />
