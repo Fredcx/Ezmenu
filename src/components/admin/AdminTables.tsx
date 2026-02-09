@@ -122,17 +122,32 @@ export function AdminTables() {
     };
 
     useEffect(() => {
+        if (!establishmentId) {
+            fetchTableData();
+            return;
+        }
+
         fetchTableData();
 
-        const channel = supabase.channel('admin_tables')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables' }, () => fetchTableData())
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => fetchTableData())
+        const channel = supabase.channel(`admin_tables_${establishmentId}`)
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'restaurant_tables',
+                filter: `establishment_id=eq.${establishmentId}`
+            }, () => fetchTableData())
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'orders',
+                filter: `establishment_id=eq.${establishmentId}`
+            }, () => fetchTableData())
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [establishmentId]);
 
     const saveLayout = async () => {
         try {
@@ -739,9 +754,13 @@ export function AdminTables() {
                                                             <div className="px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-[10px] font-extrabold uppercase tracking-wide border border-orange-100 flex items-center gap-1.5 shadow-sm">
                                                                 <UtensilsCrossed className="w-3 h-3" /> Rodízio
                                                             </div>
-                                                        ) : (
+                                                        ) : p.type === 'alacarte' ? (
                                                             <div className="px-3 py-1 rounded-full bg-blue-50 text-blue-600 text-[10px] font-extrabold uppercase tracking-wide border border-blue-100 flex items-center gap-1.5 shadow-sm">
                                                                 <Receipt className="w-3 h-3" /> À La Carte
+                                                            </div>
+                                                        ) : (
+                                                            <div className="px-3 py-1 rounded-full bg-emerald-50 text-emerald-600 text-[10px] font-extrabold uppercase tracking-wide border border-emerald-100 flex items-center gap-1.5 shadow-sm">
+                                                                <User className="w-3 h-3" /> Na Mesa
                                                             </div>
                                                         )}
                                                     </div>

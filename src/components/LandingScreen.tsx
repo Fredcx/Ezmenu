@@ -160,7 +160,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
             const newOccupant = {
                 name: userName,
                 email: userEmail,
-                type: 'rodizio', // Default for now
+                type: 'none', // Initial status
                 joined_at: new Date().toISOString()
             };
 
