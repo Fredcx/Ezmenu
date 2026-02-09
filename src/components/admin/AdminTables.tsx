@@ -53,7 +53,7 @@ export function AdminTables() {
     const [showQrModal, setShowQrModal] = useState(false);
 
     useEffect(() => {
-        const interval = setInterval(() => setCurrentTime(Date.now()), 10000); // 10s for more "live" feel
+        const interval = setInterval(() => setCurrentTime(Date.now()), 1000); // 1s for "live" timer
         return () => clearInterval(interval);
     }, []);
 
@@ -127,24 +127,43 @@ export function AdminTables() {
             return;
         }
 
+        console.log("Setting up Realtime subscription for establishment:", establishmentId);
         fetchTableData();
 
-        const channel = supabase.channel(`admin_tables_${establishmentId}`)
+        // Single channel for all changes to maintain sync
+        const channel = supabase.channel(`establishment_sync_${establishmentId}`)
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
                 table: 'restaurant_tables',
                 filter: `establishment_id=eq.${establishmentId}`
-            }, () => fetchTableData())
+            }, (payload) => {
+                console.log("Table update received:", payload);
+                fetchTableData();
+            })
             .on('postgres_changes', {
                 event: '*',
                 schema: 'public',
                 table: 'orders',
                 filter: `establishment_id=eq.${establishmentId}`
-            }, () => fetchTableData())
-            .subscribe();
+            }, (payload) => {
+                console.log("Order update received:", payload);
+                fetchTableData();
+            })
+            .on('postgres_changes', {
+                event: '*',
+                schema: 'public',
+                table: 'order_items'
+            }, () => fetchTableData()) // Items don't have establishment_id directly usually, so we trigger refresh
+            .subscribe((status) => {
+                console.log("Realtime subscription status:", status);
+                if (status === 'SUBSCRIBED') {
+                    console.log("Successfully connected to realtime updates!");
+                }
+            });
 
         return () => {
+            console.log("Cleaning up Realtime subscription");
             supabase.removeChannel(channel);
         };
     }, [establishmentId]);
@@ -455,15 +474,28 @@ export function AdminTables() {
     // Helper to format "X min" (Production Time or Running Time)
     const getProductionTime = (item: any) => {
         const start = item._orderTimestamp;
-        // If completed, use fixed end time. If not, use 'now' (running).
         const end = (item._orderStatus === 'completed' && item._orderCompletedAt)
             ? item._orderCompletedAt
-            : Date.now();
+            : currentTime; // Use the state-synced currentTime
 
-        const diff = Math.floor((end - start) / 60000); // minutes
+        const diffSeconds = Math.floor((end - start) / 1000);
+        const diffMins = Math.floor(diffSeconds / 60);
 
-        if (diff < 1) return 'Agora';
-        return `${diff} min`;
+        if (diffMins < 1) return 'Agora';
+        return `${diffMins} min`;
+    };
+
+    const formatDuration = (ms: number) => {
+        const totalSeconds = Math.floor(ms / 1000);
+        const hours = Math.floor(totalSeconds / 3600);
+        const minutes = Math.floor((totalSeconds % 3600) / 60);
+        const seconds = totalSeconds % 60;
+
+        return [
+            hours.toString().padStart(2, '0'),
+            minutes.toString().padStart(2, '0'),
+            seconds.toString().padStart(2, '0')
+        ].join(':');
     };
 
     return (
@@ -681,12 +713,12 @@ export function AdminTables() {
                                         <>
                                             <div className="flex items-center gap-2 text-red-600 font-bold uppercase tracking-wider text-[10px]">
                                                 <UtensilsCrossed className="w-3 h-3" />
-                                                <span>Em atendimento há {getTableMetrics(selectedTable || '')?.occupiedMins} min</span>
+                                                <span>Em atendimento: {formatDuration(currentTime - (getTableMetrics(selectedTable || '')?.occupiedSince || currentTime))}</span>
                                             </div>
                                             {getTableMetrics(selectedTable || '')?.hasAlert && (
                                                 <div className="flex items-center gap-2 text-amber-600 font-bold uppercase tracking-wider text-[10px] animate-pulse">
                                                     <Clock className="w-3 h-3" />
-                                                    <span>Inativa há {getTableMetrics(selectedTable || '')?.inactiveMins} min</span>
+                                                    <span>Inativa há: {formatDuration(currentTime - (getTableMetrics(selectedTable || '')?.lastOrderAt || currentTime))}</span>
                                                 </div>
                                             )}
                                         </>
