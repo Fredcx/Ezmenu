@@ -15,6 +15,7 @@ interface LandingScreenProps {
 export function LandingScreen({ onSelectOption, hasTable = false }: LandingScreenProps) {
     const { t } = useLanguage();
     const [tableStatus, setTableStatus] = useState<'free' | 'occupied' | 'waiting_payment' | 'loading'>('loading');
+    const [currentOccupants, setCurrentOccupants] = useState<any[]>([]);
 
     // Capture table and establishment from URL
     const { slug } = useParams();
@@ -99,15 +100,17 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
             try {
                 const { data, error } = await supabase
                     .from('restaurant_tables')
-                    .select('status')
+                    .select('status, occupants')
                     .eq('id', tableName)
                     .single();
 
                 if (error) throw error;
                 setTableStatus(data?.status || 'free');
+                setCurrentOccupants(data?.occupants || []);
             } catch (e) {
                 console.error("Error fetching table status", e);
                 setTableStatus('free');
+                setCurrentOccupants([]);
             }
         };
 
@@ -116,6 +119,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
         const channel = supabase.channel(`table_status_${tableName}`)
             .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'restaurant_tables', filter: `id=eq.${tableName}` }, (payload) => {
                 setTableStatus(payload.new.status);
+                setCurrentOccupants(payload.new.occupants || []);
             })
             .subscribe();
 
@@ -131,23 +135,50 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
         }
         setIsOccupying(true);
         try {
+            const userEmail = localStorage.getItem('ez_menu_client_email') || '';
+            const userName = localStorage.getItem('ez_menu_client_name') || 'Cliente';
+
+            // 1. Fetch latest occupants to avoid race conditions
+            const { data: latestTable } = await supabase
+                .from('restaurant_tables')
+                .select('occupants, status')
+                .eq('id', tableName)
+                .single();
+
+            const existingOccupants = latestTable?.occupants || [];
+
+            // 2. Check if user already in list
+            const alreadyJoined = existingOccupants.some((occ: any) => occ.email === userEmail);
+
+            if (alreadyJoined) {
+                toast.success("Você já está registrado nesta mesa!");
+                setTableStatus('occupied');
+                setCurrentOccupants(existingOccupants);
+                return;
+            }
+
+            const newOccupant = {
+                name: userName,
+                email: userEmail,
+                type: 'rodizio', // Default for now
+                joined_at: new Date().toISOString()
+            };
+
+            const updatedOccupants = [...existingOccupants, newOccupant];
+
             const { error } = await supabase
                 .from('restaurant_tables')
                 .update({
                     status: 'occupied',
                     last_activity_at: new Date().toISOString(),
-                    occupants: [{
-                        name: localStorage.getItem('ez_menu_client_name') || 'Cliente',
-                        email: localStorage.getItem('ez_menu_client_email') || '',
-                        type: 'rodizio', // Default for now
-                        joined_at: new Date().toISOString()
-                    }]
+                    occupants: updatedOccupants
                 })
                 .eq('id', tableName);
 
             if (error) throw error;
-            toast.success("Mesa ocupada com sucesso! Bom apetite.");
+            toast.success(existingOccupants.length > 0 ? "Você entrou na mesa!" : "Mesa ocupada com sucesso!");
             setTableStatus('occupied');
+            setCurrentOccupants(updatedOccupants);
         } catch (e) {
             console.error(e);
             toast.error("Erro ao ocupar mesa. Tente novamente.");
@@ -202,7 +233,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                         {establishment?.name ? 'Premium Dining' : ''}
                     </p>
 
-                    {hasTable && tableName && tableStatus === 'free' && (
+                    {hasTable && tableName && (tableStatus === 'free' || (tableStatus === 'occupied' && !currentOccupants.some(o => o.email === localStorage.getItem('ez_menu_client_email')))) && (
                         <div className="px-4 mb-12 max-w-sm mx-auto animate-in slide-in-from-bottom-8 duration-700">
                             <button
                                 onClick={handleOccupy}
@@ -211,9 +242,18 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                             >
                                 <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-shimmer" />
                                 {isOccupying ? <Loader2 className="w-6 h-6 animate-spin" /> : <Armchair className="w-6 h-6" />}
-                                <span className="text-xl font-black tracking-tight uppercase">Ocupar Mesa</span>
+                                <span className="text-xl font-black tracking-tight uppercase">
+                                    {tableStatus === 'occupied' ? 'Entrar na Mesa' : 'Ocupar Mesa'}
+                                </span>
                                 <ChevronRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform duration-500" />
                             </button>
+                        </div>
+                    )}
+
+                    {hasTable && tableStatus === 'occupied' && currentOccupants.some(o => o.email === localStorage.getItem('ez_menu_client_email')) && (
+                        <div className="px-6 mb-12 text-emerald-600 bg-emerald-50/80 backdrop-blur-sm border border-emerald-200/50 py-5 rounded-[2rem] shadow-premium animate-in fade-in duration-500 mx-auto max-w-sm flex items-center justify-center gap-3">
+                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em]">Você está nesta mesa</p>
                         </div>
                     )}
 
