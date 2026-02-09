@@ -28,6 +28,7 @@ export function DiscoveryScreen() {
     const [establishments, setEstablishments] = useState<Establishment[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
     const [isLoading, setIsLoading] = useState(true);
+    const [userProfile, setUserProfile] = useState<{ name: string | null; email: string | null } | null>(null);
     const navigate = useNavigate();
 
     useEffect(() => {
@@ -83,7 +84,37 @@ export function DiscoveryScreen() {
                 setIsLoading(false);
             }
         };
+        const fetchUserData = async () => {
+            const hasAuth = localStorage.getItem('ez_menu_access') === 'granted';
+            if (hasAuth) {
+                const storedName = localStorage.getItem('ez_menu_user_name');
+                const storedEmail = localStorage.getItem('ez_menu_user_email');
+
+                // Also check supabase session for more info
+                const { data: { session } } = await supabase.auth.getSession();
+                if (session?.user) {
+                    const { data: profile } = await supabase
+                        .from('profiles')
+                        .select('full_name, email')
+                        .eq('id', session.user.id)
+                        .single();
+
+                    if (profile) {
+                        setUserProfile({
+                            name: profile.full_name || storedName,
+                            email: profile.email || storedEmail
+                        });
+                    } else {
+                        setUserProfile({ name: storedName, email: storedEmail });
+                    }
+                } else {
+                    setUserProfile({ name: storedName, email: storedEmail });
+                }
+            }
+        };
+
         fetchData();
+        fetchUserData();
     }, []);
 
     const filtered = establishments.filter(e =>
@@ -148,7 +179,7 @@ export function DiscoveryScreen() {
                 <div className="flex items-center gap-3 md:gap-10">
                     <button
                         onClick={() => {
-                            const hasAuth = localStorage.getItem('ez_menu_access') === 'granted';
+                            const hasAuth = !!userProfile || localStorage.getItem('ez_menu_access') === 'granted';
                             if (!hasAuth) {
                                 toast.error("Faça login para ver suas reservas");
                                 navigate('/login');
@@ -160,12 +191,45 @@ export function DiscoveryScreen() {
                     >
                         Minhas Reservas
                     </button>
-                    <button
-                        onClick={() => navigate('/login')}
-                        className="bg-[#ED1B2E] text-white px-4 md:px-8 py-2 md:py-3 rounded-full text-[10px] md:text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-red-500/20 hover:scale-105 active:scale-95 transition-all"
-                    >
-                        Acessar
-                    </button>
+
+                    {userProfile ? (
+                        <div className="flex items-center gap-3 md:gap-6">
+                            <button
+                                onClick={() => navigate('/reservations')}
+                                className="flex items-center gap-2 text-white group"
+                            >
+                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 group-hover:bg-[#ED1B2E] group-hover:text-white transition-all shadow-xl border border-white/5">
+                                    <Users className="w-4 h-4 md:w-5 md:h-5 text-current" />
+                                </div>
+                                <span className="hidden md:block text-[10px] md:text-xs font-black uppercase tracking-widest text-white/90 group-hover:text-white transition-colors">
+                                    {userProfile.name?.split(' ')[0] || 'Minha Conta'}
+                                </span>
+                            </button>
+                            <button
+                                onClick={() => {
+                                    localStorage.removeItem('ez_menu_access');
+                                    localStorage.removeItem('ez_menu_access_time');
+                                    localStorage.removeItem('ez_menu_user_name');
+                                    localStorage.removeItem('ez_menu_user_email');
+                                    supabase.auth.signOut();
+                                    setUserProfile(null);
+                                    toast.success("Log out realizado com sucesso");
+                                    navigate('/');
+                                }}
+                                className="text-white/40 hover:text-[#ED1B2E] transition-colors p-2"
+                                title="Sair"
+                            >
+                                <X className="w-4 h-4 md:w-5 md:h-5" />
+                            </button>
+                        </div>
+                    ) : (
+                        <button
+                            onClick={() => navigate('/login')}
+                            className="bg-[#ED1B2E] text-white px-4 md:px-8 py-2 md:py-3 rounded-full text-[10px] md:text-xs font-black uppercase tracking-[0.2em] shadow-lg shadow-red-500/20 hover:scale-105 active:scale-95 transition-all"
+                        >
+                            Acessar
+                        </button>
+                    )}
                 </div>
             </header>
 
