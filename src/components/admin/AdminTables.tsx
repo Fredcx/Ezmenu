@@ -284,46 +284,49 @@ export function AdminTables() {
 
     // ----- Helper for display -----
     const getTableMetrics = (tableId: string) => {
+        const table = tables.find(t => t.id === tableId);
+        if (!table || table.status === 'free') return null;
+
         const tableOrders = orders.filter(o => o.table_id === tableId && o.status !== 'cancelled' && o.status !== 'archived');
-        if (tableOrders.length === 0) return null;
 
-        const timestamps = tableOrders.map(o => new Date(o.created_at).getTime());
-        const firstOrder = Math.min(...timestamps);
-        const lastOrder = Math.max(...timestamps);
+        // Base time: when they sat down (last_activity_at is updated when occupying)
+        const satDownAt = table.last_activity_at ? new Date(table.last_activity_at).getTime() : Date.now();
+        const occupiedMins = Math.floor((currentTime - satDownAt) / 60000);
 
-        const occupiedMins = Math.floor((currentTime - firstOrder) / 60000);
-        const inactiveMins = Math.floor((currentTime - lastOrder) / 60000);
+        // Inactivity time: since last order OR since they sat down if no orders
+        const lastOrderAt = tableOrders.length > 0
+            ? Math.max(...tableOrders.map(o => new Date(o.created_at).getTime()))
+            : satDownAt;
+
+        const inactiveMins = Math.floor((currentTime - lastOrderAt) / 60000);
 
         return {
-            occupiedSince: firstOrder,
-            lastOrderAt: lastOrder,
+            occupiedSince: satDownAt,
+            lastOrderAt,
             occupiedMins,
             inactiveMins,
-            hasAlert: inactiveMins > 15, // Alert if more than 15 mins without new orders
+            hasAlert: inactiveMins > 15,
             orderCount: tableOrders.length
         };
     };
 
     const getTableStatus = (tableId: string) => {
         const table = tables.find(t => t.id === tableId);
-        if (!table) return 'free';
+        if (!table || table.status === 'free') return 'free';
 
         const metrics = getTableMetrics(tableId);
 
-        // Extended status logic
+        // Timeout logic: 40 minutes without any order
+        if (metrics && metrics.orderCount === 0 && metrics.inactiveMins >= 40) {
+            return 'timeout';
+        }
+
         if (table.status === 'occupied') {
-            if (metrics) {
+            if (metrics && metrics.orderCount > 0) {
                 if (metrics.inactiveMins > 20) return 'eating';
                 return 'ordered';
             }
             return 'occupied';
-        }
-
-        // Timeout logic: 40 minutes [V2 FEATURE]
-        if (table.status !== 'free' && table.last_activity_at) {
-            const lastActivity = new Date(table.last_activity_at).getTime();
-            const diff = (currentTime - lastActivity) / 60000;
-            if (diff > 40) return 'timeout';
         }
 
         return table.status;
