@@ -1,13 +1,15 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
-import { Calendar, Clock, CheckCircle2, XCircle, Loader2, User, MessageCircle } from 'lucide-react';
+import { Calendar, Clock, CheckCircle2, XCircle, Loader2, User, MessageCircle, Phone, CreditCard } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Reservation {
     id: string;
     customer_name: string;
     customer_email: string;
+    customer_phone?: string;
+    customer_cpf?: string;
     party_size: number;
     reservation_time: string;
     status: 'pending' | 'confirmed' | 'cancelled' | 'completed';
@@ -131,10 +133,12 @@ export const AdminReservations = () => {
                                             {res.status}
                                         </span>
                                     </div>
-                                    <div className="grid grid-cols-2 gap-x-8 gap-y-1 text-sm text-muted-foreground">
+                                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-8 gap-y-1 text-sm text-muted-foreground">
                                         <span className="flex items-center gap-1.5"><Clock className="w-4 h-4 text-primary" /> {new Date(res.reservation_time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                                         <span className="flex items-center gap-1.5"><User className="w-4 h-4 text-primary" /> {res.party_size} Pessoas</span>
-                                        {res.notes && <span className="col-span-2 flex items-start gap-1.5 mt-2 italic bg-muted/30 p-2 rounded-lg leading-tight"><MessageCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" /> {res.notes}</span>}
+                                        {res.customer_phone && <span className="flex items-center gap-1.5 font-medium"><Phone className="w-4 h-4 text-primary" /> {res.customer_phone}</span>}
+                                        {res.customer_cpf && <span className="flex items-center gap-1.5 font-medium"><CreditCard className="w-4 h-4 text-primary" /> {res.customer_cpf}</span>}
+                                        {res.notes && <span className="col-span-full flex items-start gap-1.5 mt-2 italic bg-muted/30 p-2 rounded-lg leading-tight"><MessageCircle className="w-4 h-4 text-primary mt-0.5 shrink-0" /> {res.notes}</span>}
                                     </div>
                                 </div>
                             </div>

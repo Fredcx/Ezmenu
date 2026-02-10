@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
-import { Loader2, Upload, Store, Image as ImageIcon } from 'lucide-react';
+import { Loader2, Upload, Store, Image as ImageIcon, MapPin, Eye, EyeOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useParams } from 'react-router-dom';
@@ -12,6 +12,8 @@ export function AdminSettings() {
     const [isSaving, setIsSaving] = useState(false);
     const [establishment, setEstablishment] = useState<any>(null);
     const [name, setName] = useState('');
+    const [address, setAddress] = useState('');
+    const [isVisible, setIsVisible] = useState(true);
     const [logoUrl, setLogoUrl] = useState('');
 
     useEffect(() => {
@@ -25,6 +27,8 @@ export function AdminSettings() {
             if (data) {
                 setEstablishment(data);
                 setName(data.name);
+                setAddress(data.address || '');
+                setIsVisible(data.is_visible !== false);
                 setLogoUrl(data.logo_url || '');
             }
             setIsLoading(false);
@@ -37,7 +41,12 @@ export function AdminSettings() {
         try {
             const { error } = await supabase
                 .from('establishments')
-                .update({ name, logo_url: logoUrl })
+                .update({
+                    name,
+                    address,
+                    is_visible: isVisible,
+                    logo_url: logoUrl
+                })
                 .eq('id', establishment.id);
 
             if (error) throw error;
@@ -71,6 +80,47 @@ export function AdminSettings() {
                             placeholder="Nome do Restaurante"
                         />
                     </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Endereço</label>
+                    <div className="relative">
+                        <MapPin className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40" />
+                        <Input
+                            value={address}
+                            onChange={(e) => setAddress(e.target.value)}
+                            className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
+                            placeholder="Endereço Completo"
+                        />
+                    </div>
+                </div>
+
+                <div className="space-y-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Visibilidade no Discovery</label>
+                    <button
+                        onClick={() => setIsVisible(!isVisible)}
+                        className={`w-full h-14 rounded-2xl border border-border/40 flex items-center justify-between px-6 transition-all ${isVisible ? 'bg-emerald-50 border-emerald-200' : 'bg-red-50 border-red-200'
+                            }`}
+                    >
+                        <div className="flex items-center gap-3">
+                            {isVisible ? (
+                                <Eye className="w-5 h-5 text-emerald-600" />
+                            ) : (
+                                <EyeOff className="w-5 h-5 text-red-600" />
+                            )}
+                            <span className={`font-bold ${isVisible ? 'text-emerald-700' : 'text-red-700'}`}>
+                                {isVisible ? 'Visível para Clientes' : 'Oculto no Discovery'}
+                            </span>
+                        </div>
+                        <div className={`w-12 h-6 rounded-full relative transition-colors duration-300 ${isVisible ? 'bg-emerald-500' : 'bg-red-500'
+                            }`}>
+                            <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all duration-300 ${isVisible ? 'left-7' : 'left-1'
+                                }`} />
+                        </div>
+                    </button>
+                    <p className="text-[10px] text-muted-foreground italic ml-2">
+                        Define se o restaurante aparece na busca pública e aba de descobertas.
+                    </p>
                 </div>
 
                 <div className="space-y-4">

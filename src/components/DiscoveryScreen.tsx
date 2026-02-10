@@ -16,6 +16,7 @@ interface Establishment {
     show_tables: boolean;
     show_queue: boolean;
     show_reservations: boolean;
+    is_visible: boolean;
     stats?: {
         total_tables: number;
         occupied_tables: number;
@@ -38,7 +39,8 @@ export function DiscoveryScreen() {
                 const { data: ests, error } = await supabase
                     .from('establishments')
                     .select('*')
-                    .eq('status', 'active'); // Ensure we only fetch active restaurants
+                    .eq('status', 'active') // Ensure we only fetch active restaurants
+                    .eq('is_visible', true);
 
                 if (error) {
                     console.error("Error fetching establishments:", error);
@@ -127,22 +129,25 @@ export function DiscoveryScreen() {
     const [resDate, setResDate] = useState('');
     const [resTime, setResTime] = useState('');
     const [resPartySize, setResPartySize] = useState(2);
+    const [resName, setResName] = useState('');
+    const [resEmail, setResEmail] = useState('');
+    const [resPhone, setResPhone] = useState('');
+    const [resCPF, setResCPF] = useState('');
     const [resNotes, setResNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const handleReservation = async () => {
         setIsSubmitting(true);
         if (!selectedEst?.id) { toast.error("Loja não identificada"); setIsSubmitting(false); return; }
-        if (!resDate || !resTime) { toast.error("Selecione data e hora"); setIsSubmitting(false); return; }
+        if (!resDate || !resTime || !resName || !resPhone) { toast.error("Preencha nome, data, hora e telefone"); setIsSubmitting(false); return; }
 
-        const clientEmail = localStorage.getItem('ez_menu_client_email');
-        if (!clientEmail) { toast.error("Identifique-se primeiro no restaurante"); setIsSubmitting(false); return; }
+        const emailToUse = resEmail || localStorage.getItem('ez_menu_client_email') || localStorage.getItem('ez_menu_user_email');
 
         try {
             const { data: profile } = await supabase
                 .from('profiles')
                 .select('id')
-                .eq('email', clientEmail)
+                .eq('email', emailToUse)
                 .single();
 
             const reservationTime = new Date(`${resDate}T${resTime}`).toISOString();
@@ -150,8 +155,10 @@ export function DiscoveryScreen() {
             const { error } = await supabase.from('reservations').insert({
                 establishment_id: selectedEst.id,
                 customer_id: profile?.id,
-                customer_name: localStorage.getItem('ez_menu_client_name') || 'Cliente',
-                customer_email: clientEmail,
+                customer_name: resName,
+                customer_email: emailToUse,
+                customer_phone: resPhone,
+                customer_cpf: resCPF,
                 party_size: resPartySize,
                 reservation_time: reservationTime,
                 notes: resNotes
@@ -193,17 +200,22 @@ export function DiscoveryScreen() {
                     </button>
 
                     {userProfile ? (
-                        <div className="flex items-center gap-3 md:gap-6">
+                        <div className="flex items-center gap-3">
                             <button
                                 onClick={() => navigate('/reservations')}
-                                className="flex items-center gap-2 text-white group"
+                                className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-2xl transition-all border border-white/5 group"
                             >
-                                <div className="w-8 h-8 md:w-10 md:h-10 rounded-full bg-white/10 flex items-center justify-center text-white/70 group-hover:bg-[#ED1B2E] group-hover:text-white transition-all shadow-xl border border-white/5">
-                                    <Users className="w-4 h-4 md:w-5 md:h-5 text-current" />
+                                <div className="w-8 h-8 rounded-full bg-[#ED1B2E] flex items-center justify-center text-white font-bold text-xs shadow-lg">
+                                    {userProfile.name?.substring(0, 1).toUpperCase() || 'U'}
                                 </div>
-                                <span className="hidden md:block text-[10px] md:text-xs font-black uppercase tracking-widest text-white/90 group-hover:text-white transition-colors">
-                                    {userProfile.name?.split(' ')[0] || 'Minha Conta'}
-                                </span>
+                                <div className="hidden md:flex flex-col items-start leading-tight">
+                                    <span className="text-[10px] font-black uppercase tracking-widest text-white">
+                                        {userProfile.name?.split(' ')[0]}
+                                    </span>
+                                    <span className="text-[8px] font-bold text-white/40 uppercase tracking-tighter">
+                                        Ver Conta
+                                    </span>
+                                </div>
                             </button>
                             <button
                                 onClick={() => {
@@ -211,15 +223,17 @@ export function DiscoveryScreen() {
                                     localStorage.removeItem('ez_menu_access_time');
                                     localStorage.removeItem('ez_menu_user_name');
                                     localStorage.removeItem('ez_menu_user_email');
+                                    localStorage.removeItem('ez_menu_client_name');
+                                    localStorage.removeItem('ez_menu_client_email');
                                     supabase.auth.signOut();
                                     setUserProfile(null);
-                                    toast.success("Log out realizado com sucesso");
+                                    toast.success("Sessão encerrada");
                                     navigate('/');
                                 }}
-                                className="text-white/40 hover:text-[#ED1B2E] transition-colors p-2"
+                                className="w-10 h-10 flex items-center justify-center text-white/40 hover:text-[#ED1B2E] transition-colors rounded-xl bg-white/5 hover:bg-white/10"
                                 title="Sair"
                             >
-                                <X className="w-4 h-4 md:w-5 md:h-5" />
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
                     ) : (
@@ -390,10 +404,9 @@ export function DiscoveryScreen() {
                 </div>
             </footer>
 
-            {/* Reservation Modal */}
             {showResModal && selectedEst && (
                 <div className="fixed inset-0 z-[200] flex items-end sm:items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-card w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl relative animate-in slide-in-from-bottom-10 h-[80vh] sm:h-auto overflow-y-auto no-scrollbar">
+                    <div className="bg-card w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-8 shadow-2xl relative animate-in slide-in-from-bottom-10 h-[90vh] sm:h-auto overflow-y-auto no-scrollbar">
                         <button onClick={() => setShowResModal(false)} className="absolute top-6 right-6 p-2 rounded-full bg-muted/50 hover:bg-muted transition-colors"><X className="w-5 h-5" /></button>
                         <div className="text-center mb-8">
                             <div className="w-16 h-16 bg-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
@@ -403,26 +416,46 @@ export function DiscoveryScreen() {
                             <p className="text-muted-foreground text-[10px] uppercase tracking-widest font-black">Solicitação sujeita a aprovação</p>
                         </div>
                         <div className="space-y-6">
-                            <div className="space-y-4">
+                            <div className="grid grid-cols-1 gap-4">
                                 <div className="space-y-2">
-                                    <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Data da Reserva</label>
-                                    <input type="date" value={resDate} onChange={(e) => setResDate(e.target.value)} className="w-full h-14 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
+                                    <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Nome Completo</label>
+                                    <input type="text" value={resName} onChange={(e) => setResName(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" placeholder="Seu Nome" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">WhatsApp / Celular</label>
+                                        <input type="tel" value={resPhone} onChange={(e) => setResPhone(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" placeholder="(00) 00000-0000" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">CPF (Opcional)</label>
+                                        <input type="text" value={resCPF} onChange={(e) => setResCPF(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" placeholder="000.000.000-00" />
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
-                                    <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Horário</label>
-                                    <input type="time" value={resTime} onChange={(e) => setResTime(e.target.value)} className="w-full h-14 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
+                                    <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">E-mail para Confirmação</label>
+                                    <input type="email" value={resEmail} onChange={(e) => setResEmail(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" placeholder="seu@email.com" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Data</label>
+                                        <input type="date" value={resDate} onChange={(e) => setResDate(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Horário</label>
+                                        <input type="time" value={resTime} onChange={(e) => setResTime(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
+                                    </div>
                                 </div>
                                 <div className="space-y-2">
                                     <label className="text-[10px] uppercase font-black text-muted-foreground ml-2 text-center block">Número de Pessoas</label>
-                                    <div className="flex items-center justify-center gap-6 bg-muted/30 p-4 rounded-2xl border border-black/5">
-                                        <button onClick={() => setResPartySize(Math.max(1, resPartySize - 1))} className="w-10 h-10 rounded-xl bg-white border flex items-center justify-center text-xl font-bold shadow-sm">-</button>
-                                        <span className="text-3xl font-black">{resPartySize}</span>
-                                        <button onClick={() => setResPartySize(resPartySize + 1)} className="w-10 h-10 rounded-xl bg-white border flex items-center justify-center text-xl font-bold shadow-sm">+</button>
+                                    <div className="flex items-center justify-center gap-6 bg-muted/30 p-2 rounded-2xl border border-black/5">
+                                        <button onClick={() => setResPartySize(Math.max(1, resPartySize - 1))} className="w-8 h-8 rounded-xl bg-white border flex items-center justify-center text-xl font-bold shadow-sm">-</button>
+                                        <span className="text-2xl font-black">{resPartySize}</span>
+                                        <button onClick={() => setResPartySize(resPartySize + 1)} className="w-8 h-8 rounded-xl bg-white border flex items-center justify-center text-xl font-bold shadow-sm">+</button>
                                     </div>
                                 </div>
                             </div>
                             <button onClick={handleReservation} disabled={isSubmitting} className="w-full h-14 bg-black text-white rounded-2xl font-black uppercase tracking-widest flex items-center justify-center gap-2 shadow-xl active:scale-95 transition-all">
-                                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Solicitar Reserva"}
+                                {isSubmitting ? <Loader2 className="w-6 h-6 animate-spin" /> : "Fazer Reserva"}
                             </button>
                         </div>
                     </div>
