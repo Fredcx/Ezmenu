@@ -17,6 +17,9 @@ interface Establishment {
     show_queue: boolean;
     show_reservations: boolean;
     is_visible: boolean;
+    max_reservations_per_slot: number;
+    reservation_start_time: string;
+    reservation_end_time: string;
     stats?: {
         total_tables: number;
         occupied_tables: number;
@@ -135,11 +138,70 @@ export function DiscoveryScreen() {
     const [resCPF, setResCPF] = useState('');
     const [resNotes, setResNotes] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const [isProfileOpen, setIsProfileOpen] = useState(false);
+    const [availableSlots, setAvailableSlots] = useState<string[]>([]);
+
+    useEffect(() => {
+        if (!selectedEst) return;
+        const start = selectedEst.reservation_start_time || '18:00';
+        const end = selectedEst.reservation_end_time || '23:00';
+
+        const slots: string[] = [];
+        let current = new Date(`2000-01-01T${start}`);
+        const endTime = new Date(`2000-01-01T${end}`);
+
+        while (current <= endTime) {
+            slots.push(current.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }));
+            current = new Date(current.getTime() + 30 * 60000); // Adiciona 30 mins
+        }
+        setAvailableSlots(slots);
+        if (resTime && !slots.includes(resTime)) setResTime(slots[0] || '');
+    }, [selectedEst]);
 
     const handleReservation = async () => {
         setIsSubmitting(true);
         if (!selectedEst?.id) { toast.error("Loja não identificada"); setIsSubmitting(false); return; }
         if (!resDate || !resTime || !resName || !resPhone) { toast.error("Preencha nome, data, hora e telefone"); setIsSubmitting(false); return; }
+
+        // 0. Check One Reservation Per Day Rule
+        const startOfDay = new Date(resDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        const endOfDay = new Date(resDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        const { data: dailyRes } = await supabase
+            .from('reservations')
+            .select('id')
+            .eq('establishment_id', selectedEst.id)
+            .eq('customer_email', resEmail || userProfile?.email)
+            .gte('reservation_time', startOfDay.toISOString())
+            .lte('reservation_time', endOfDay.toISOString())
+            .neq('status', 'cancelled');
+
+        if (dailyRes && dailyRes.length > 0) {
+            toast.error("Você já possui uma reserva para este dia neste restaurante.");
+            setIsSubmitting(false);
+            return;
+        }
+
+        const reservationTime = new Date(`${resDate}T${resTime}`).toISOString();
+
+        // 1. Check Capacity
+        const { data: existingReservations } = await supabase
+            .from('reservations')
+            .select('party_size')
+            .eq('establishment_id', selectedEst.id)
+            .eq('reservation_time', reservationTime)
+            .neq('status', 'cancelled');
+
+        const currentTotal = existingReservations?.reduce((acc, res) => acc + res.party_size, 0) || 0;
+        const limit = selectedEst.max_reservations_per_slot || 10;
+
+        if (currentTotal + resPartySize > limit) {
+            toast.error(`Desculpe, este horário está lotado. Capacidade restante: ${Math.max(0, limit - currentTotal)} pessoas.`);
+            setIsSubmitting(false);
+            return;
+        }
 
         const emailToUse = resEmail || localStorage.getItem('ez_menu_client_email') || localStorage.getItem('ez_menu_user_email');
 
@@ -149,8 +211,6 @@ export function DiscoveryScreen() {
                 .select('id')
                 .eq('email', emailToUse)
                 .single();
-
-            const reservationTime = new Date(`${resDate}T${resTime}`).toISOString();
 
             const { error } = await supabase.from('reservations').insert({
                 establishment_id: selectedEst.id,
@@ -200,9 +260,9 @@ export function DiscoveryScreen() {
                     </button>
 
                     {userProfile ? (
-                        <div className="flex items-center gap-3">
+                        <div className="relative">
                             <button
-                                onClick={() => navigate('/reservations')}
+                                onClick={() => setIsProfileOpen(!isProfileOpen)}
                                 className="flex items-center gap-3 bg-white/5 hover:bg-white/10 px-4 py-2 rounded-2xl transition-all border border-white/5 group"
                             >
                                 <div className="w-8 h-8 rounded-full bg-[#ED1B2E] flex items-center justify-center text-white font-bold text-xs shadow-lg">
@@ -217,24 +277,47 @@ export function DiscoveryScreen() {
                                     </span>
                                 </div>
                             </button>
-                            <button
-                                onClick={() => {
-                                    localStorage.removeItem('ez_menu_access');
-                                    localStorage.removeItem('ez_menu_access_time');
-                                    localStorage.removeItem('ez_menu_user_name');
-                                    localStorage.removeItem('ez_menu_user_email');
-                                    localStorage.removeItem('ez_menu_client_name');
-                                    localStorage.removeItem('ez_menu_client_email');
-                                    supabase.auth.signOut();
-                                    setUserProfile(null);
-                                    toast.success("Sessão encerrada");
-                                    navigate('/');
-                                }}
-                                className="w-10 h-10 flex items-center justify-center text-white/40 hover:text-[#ED1B2E] transition-colors rounded-xl bg-white/5 hover:bg-white/10"
-                                title="Sair"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
+
+                            {isProfileOpen && (
+                                <>
+                                    <div className="fixed inset-0 z-[110]" onClick={() => setIsProfileOpen(false)} />
+                                    <div className="absolute right-0 mt-3 w-56 bg-[#1A1A1A] border border-white/10 rounded-2xl shadow-2xl z-[120] overflow-hidden animate-in fade-in slide-in-from-top-2">
+                                        <div className="p-4 border-b border-white/5">
+                                            <p className="text-[10px] font-black text-white/40 uppercase tracking-widest">Acessado como</p>
+                                            <p className="text-xs font-bold text-white truncate">{userProfile.email}</p>
+                                        </div>
+                                        <div className="p-2">
+                                            <button
+                                                onClick={() => {
+                                                    setIsProfileOpen(false);
+                                                    navigate('/reservations');
+                                                }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 text-white/70 hover:text-white hover:bg-white/5 rounded-xl transition-colors text-xs font-bold"
+                                            >
+                                                <Calendar className="w-4 h-4" /> Minhas Reservas
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    localStorage.removeItem('ez_menu_access');
+                                                    localStorage.removeItem('ez_menu_access_time');
+                                                    localStorage.removeItem('ez_menu_user_name');
+                                                    localStorage.removeItem('ez_menu_user_email');
+                                                    localStorage.removeItem('ez_menu_client_name');
+                                                    localStorage.removeItem('ez_menu_client_email');
+                                                    supabase.auth.signOut();
+                                                    setUserProfile(null);
+                                                    setIsProfileOpen(false);
+                                                    toast.success("Sessão encerrada");
+                                                    navigate('/');
+                                                }}
+                                                className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors text-xs font-bold"
+                                            >
+                                                <X className="w-4 h-4" /> Sair da Conta
+                                            </button>
+                                        </div>
+                                    </div>
+                                </>
+                            )}
                         </div>
                     ) : (
                         <button
@@ -334,8 +417,8 @@ export function DiscoveryScreen() {
                                             <Star className="w-3 h-3 fill-primary" /> Sugestão Elite
                                         </div>
                                         <h3 className="text-xl font-black text-black group-hover:text-primary transition-colors tracking-tight uppercase italic">{est.name}</h3>
-                                        <div className="flex items-center gap-2 text-[10px] text-black/40 font-bold">
-                                            <MapPin className="w-3 h-3" /> {est.address || 'Localização Premium'}
+                                        <div className="flex items-center gap-2 text-[10px] text-black/40 font-bold leading-tight">
+                                            <MapPin className="w-3 h-3 shrink-0" /> {est.address || 'Localização Premium'}
                                         </div>
                                     </div>
 
@@ -440,9 +523,28 @@ export function DiscoveryScreen() {
                                         <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Data</label>
                                         <input type="date" value={resDate} onChange={(e) => setResDate(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
                                     </div>
-                                    <div className="space-y-2">
-                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Horário</label>
-                                        <input type="time" value={resTime} onChange={(e) => setResTime(e.target.value)} className="w-full h-12 bg-muted/50 rounded-2xl px-6 outline-none focus:ring-2 focus:ring-primary transition-all font-bold" />
+                                    <div className="space-y-4">
+                                        <label className="text-[10px] uppercase font-black text-muted-foreground ml-2">Escolha o Horário</label>
+                                        <div className="grid grid-cols-4 gap-2">
+                                            {availableSlots.map((slot) => (
+                                                <button
+                                                    key={slot}
+                                                    type="button"
+                                                    onClick={() => setResTime(slot)}
+                                                    className={`py-3 rounded-xl font-black text-sm transition-all shadow-sm ${resTime === slot
+                                                        ? 'bg-primary text-white shadow-primary/20 scale-105'
+                                                        : 'bg-white border border-border/40 text-foreground hover:bg-secondary/20'
+                                                        }`}
+                                                >
+                                                    {slot}
+                                                </button>
+                                            ))}
+                                            {availableSlots.length === 0 && (
+                                                <div className="col-span-4 text-center py-4 text-xs font-bold text-muted-foreground italic">
+                                                    Nenhum horário disponível para este restaurante.
+                                                </div>
+                                            )}
+                                        </div>
                                     </div>
                                 </div>
                                 <div className="space-y-2">

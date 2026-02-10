@@ -18,7 +18,6 @@ import { AdminConsumption } from "./components/admin/AdminConsumption";
 import { AdminDiscovery } from "./components/admin/AdminDiscovery";
 import { AdminQueue } from "./components/admin/AdminQueue";
 import { AdminReservations } from "./components/admin/AdminReservations";
-import { AdminSettings } from "./components/admin/AdminSettings";
 import { MenuProvider } from "./contexts/MenuContext";
 import { InventoryProvider } from "./contexts/InventoryContext";
 import { ErrorBoundary } from "./components/ErrorBoundary";

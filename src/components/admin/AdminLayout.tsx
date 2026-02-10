@@ -153,7 +153,6 @@ export const AdminLayout = () => {
         { label: 'Ficha Técnica', icon: ChefHat, path: `/${slug}/admin/recipes` },
         { label: 'Cardápio', icon: Menu, path: `/${slug}/admin/menu` },
         { label: 'Rel. Consumo', icon: TrendingDown, path: `/${slug}/admin/consumption` },
-        { label: 'Configurações', icon: Settings, path: `/${slug}/admin/settings` },
     ] : [];
 
     const navItems = isSuperAdmin ? platformItems : restaurantItems;
