@@ -34,7 +34,7 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false }: B
 
       {/* Main Bar */}
       <div className="glass border-t border-white/20 pt-2 px-6 shadow-[0_-5px_20px_rgba(0,0,0,0.05)]" style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 12px)' }}>
-        <div className="flex items-center justify-between max-w-md mx-auto relative">
+        <div className={`flex items-center ${tabs.length <= 2 ? 'justify-center gap-8' : 'justify-between'} max-w-md mx-auto relative`}>
           {tabs.map((tab) => {
             const isActive = activeTab === tab.id;
             return (
@@ -53,7 +53,7 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false }: B
                   {isActive && (
                     <div className="absolute inset-0 bg-primary/20 blur-xl rounded-full" />
                   )}
-                  {totalItems > 0 && (
+                  {totalItems > 0 && tab.id === 'cart' && (
                     <span className="absolute -top-2 -right-2 glass-card text-primary text-[10px] font-bold w-5 h-5 flex items-center justify-center rounded-full border border-primary/20">
                       {totalItems}
                     </span>

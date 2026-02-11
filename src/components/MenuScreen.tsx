@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react';
 import { MenuHeader } from './MenuHeader';
-import { CategorySidebar } from './CategorySidebar';
+import { CategoryCarousel } from './CategoryCarousel';
 import { StatusBar } from './StatusBar';
 import { ProductCard } from './ProductCard';
 import { FilterModal } from './FilterModal';
@@ -117,25 +117,25 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
       />
 
       {/* Main Content */}
-      <div className="flex-1 flex overflow-hidden">
-        {/* Category Sidebar */}
-        <CategorySidebar
+      <div className="flex-1 flex flex-col overflow-hidden">
+        {/* Category Carousel (Mobile Optimized) */}
+        <CategoryCarousel
           selectedCategory={selectedCategory}
-          selectedSubcategory={selectedSubcategory}
           onSelectCategory={setSelectedCategory}
-          onSelectSubcategory={setSelectedSubcategory}
           categories={['alacarte', 'drinks', 'desserts', 'wines', 'cocktails'].includes(selectedMenu) ? alacarteCategories : rodizioCategories}
         />
 
         {/* Products Area */}
         <div className="flex-1 flex flex-col overflow-hidden">
           {/* Status Bar */}
-          <div className="px-3 py-2">
-            <StatusBar
-              expanded={statusExpanded}
-              onToggle={() => setStatusExpanded(!statusExpanded)}
-            />
-          </div>
+          {hasTable && (
+            <div className="px-3 py-2">
+              <StatusBar
+                expanded={statusExpanded}
+                onToggle={() => setStatusExpanded(!statusExpanded)}
+              />
+            </div>
+          )}
 
           {/* Round Limit Warning */}
           <RoundLimitWarning />

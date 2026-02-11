@@ -25,21 +25,20 @@ function AppContent() {
 
   // Session Management (2 hours)
   useEffect(() => {
-    // 1. Check for table in URL
+    // 1. Check for table in URL (This always takes precedence)
     const params = new URLSearchParams(window.location.search);
     const tableParam = params.get('mesa') || params.get('table');
+
     if (tableParam) {
       localStorage.setItem('ez_menu_table_name', tableParam);
       setHasTable(true);
       console.log('Table set from URL:', tableParam);
     } else {
-      // If no table in URL, check if we had one in local storage
-      const storedTable = localStorage.getItem('ez_menu_table_name');
-      if (storedTable) {
-        setHasTable(true);
-      } else {
-        setHasTable(false);
-      }
+      // If no table in URL, we force Guest Mode (don't fallback to localStorage)
+      // unless specifically requested by the user's flow
+      setHasTable(false);
+      // Optional: Clear table from localStorage to avoid old session persistence
+      // localStorage.removeItem('ez_menu_table_name');
     }
 
     const checkSession = () => {
@@ -72,8 +71,16 @@ function AppContent() {
     setHasAccess(true);
     localStorage.setItem('ez_menu_access', 'granted');
     localStorage.setItem('ez_menu_access_time', Date.now().toString());
-    if (name) localStorage.setItem('ez_menu_user_name', name);
-    if (email) localStorage.setItem('ez_menu_user_email', email);
+
+    if (name === 'Visitante') {
+      localStorage.removeItem('ez_menu_user_name');
+      localStorage.removeItem('ez_menu_user_email');
+      localStorage.removeItem('ez_menu_table_name');
+      setHasTable(false);
+    } else {
+      if (name) localStorage.setItem('ez_menu_user_name', name);
+      if (email) localStorage.setItem('ez_menu_user_email', email);
+    }
   };
 
   if (!slug) {
@@ -144,6 +151,7 @@ function AppContent() {
             <RodizioSelectionScreen
               onStartOrder={handleStartOrder}
               onBack={() => setHomeView('landing')}
+              hasTable={hasTable}
             />
           )
         )}
@@ -167,9 +175,7 @@ function AppContent() {
         onClick={() => setActiveTab('cart')}
       />
 
-      {activeTab !== 'home' && (
-        <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} hasTable={hasTable} />
-      )}
+      <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} hasTable={hasTable} />
     </div>
   );
 }

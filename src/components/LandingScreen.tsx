@@ -1,4 +1,4 @@
-import { Fish, Utensils, Wine, IceCream, ChefHat, GlassWater, Martini, Armchair, ChevronRight, Loader2, Users, Calendar, X, UserPlus } from 'lucide-react';
+import { Fish, Utensils, Wine, IceCream, ChefHat, GlassWater, Martini, Armchair, ChevronRight, Loader2, Users, Calendar, X, UserPlus, LogOut } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
@@ -7,6 +7,8 @@ import { LanguageSelector } from './LanguageSelector';
 import { BrandingLogo } from './BrandingLogo';
 import { toast } from 'sonner';
 
+import { useOrder } from '@/contexts/OrderContext';
+
 interface LandingScreenProps {
     onSelectOption: (option: 'rodizio' | 'alacarte' | 'drinks' | 'desserts' | 'wines' | 'cocktails') => void;
     hasTable?: boolean;
@@ -14,6 +16,7 @@ interface LandingScreenProps {
 
 export function LandingScreen({ onSelectOption, hasTable = false }: LandingScreenProps) {
     const { t } = useLanguage();
+    const { sentOrders, clearTableSession } = useOrder();
     const [tableStatus, setTableStatus] = useState<'free' | 'occupied' | 'waiting_payment' | 'loading'>('loading');
     const [currentOccupants, setCurrentOccupants] = useState<any[]>([]);
 
@@ -187,6 +190,17 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
         }
     };
 
+    const handleExitTable = () => {
+        if (sentOrders.length > 0) {
+            toast.error("Não é possível sair com pedidos em andamento.");
+            return;
+        }
+
+        clearTableSession();
+        // Force navigate to clean URL
+        window.location.search = '';
+    };
+
     const options = [
         { id: 'rodizio', label: t('rodizio'), icon: Fish, image: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=80', color: 'border-primary' },
         { id: 'alacarte', label: t('alacarte'), icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80', color: 'border-secondary' },
@@ -215,8 +229,19 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                         <div className="relative flex flex-col items-center">
                             <BrandingLogo variant="dark" className="w-32 h-32" showText={false} />
                             {hasTable && tableName && (
-                                <div className="absolute -bottom-3 bg-primary text-primary-foreground px-5 py-2 rounded-2xl text-[10px] font-black shadow-lg shadow-primary/30 tracking-[0.2em] uppercase border-2 border-background z-20">
-                                    Mesa {tableName}
+                                <div className="absolute -bottom-3 flex items-center gap-1 z-20">
+                                    <div className="bg-primary text-primary-foreground px-5 py-2 rounded-2xl text-[10px] font-black shadow-lg shadow-primary/30 tracking-[0.2em] uppercase border-2 border-background">
+                                        Mesa {tableName}
+                                    </div>
+                                    {sentOrders.length === 0 && (
+                                        <button
+                                            onClick={handleExitTable}
+                                            className="bg-white/10 hover:bg-red-500 hover:text-white text-foreground/40 p-2 rounded-xl border border-border/30 backdrop-blur-xl transition-all active:scale-95 shadow-lg flex items-center justify-center group"
+                                            title="Sair da Mesa"
+                                        >
+                                            <LogOut className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                                        </button>
+                                    )}
                                 </div>
                             )}
                         </div>

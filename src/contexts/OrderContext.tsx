@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
+import { toast } from 'sonner';
 
 export interface MenuItem {
   id: string;
@@ -57,6 +58,9 @@ interface OrderContextType {
   addDirectlyToSentOrders: (items: OrderItem[]) => void;
   resetTableOrders: (tableId: string) => void;
   establishmentId: string | null;
+  settings: any | null;
+  clearTableSession: () => void;
+  callService: (type: 'waiter' | 'machine') => Promise<void>;
 }
 
 const OrderContext = createContext<OrderContextType | undefined>(undefined);
@@ -76,6 +80,7 @@ const defaultFavorites: MenuItem[] = [
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [establishmentId, setEstablishmentId] = useState<string | null>(null);
+  const [settings, setSettings] = useState<any | null>(null);
   const [session, setSession] = useState<TableSession | null>(null);
   const [cart, setCart] = useState<OrderItem[]>([]);
   const [sentOrders, setSentOrders] = useState<OrderItem[]>([]);
@@ -94,12 +99,14 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
       const { data: establishment } = await supabase
         .from('establishments')
-        .select('id')
+        .select('*')
         .eq('slug', slug)
         .single();
 
       if (establishment) {
         setEstablishmentId(establishment.id);
+        setSettings(establishment);
+        localStorage.setItem('ez_menu_establishment_id', establishment.id);
 
         // 2. Initialize Session if table param exists
         const params = new URLSearchParams(window.location.search);
@@ -256,15 +263,23 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, [fetchSentOrders, establishmentId]);
 
   const sendOrder = useCallback(async () => {
-    if (cart.length === 0 || !establishmentId) return;
+    if (cart.length === 0) return;
+
+    if (!establishmentId) {
+      toast.error("Erro: Estabelecimento não identificado.");
+      return;
+    }
 
     try {
+      const currentTableId = session?.tableName || localStorage.getItem('ez_menu_table_name');
+      const clientName = localStorage.getItem('ez_menu_client_name') || 'Cliente';
+
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
-          table_id: session?.tableName || localStorage.getItem('ez_menu_table_name'),
+          table_id: currentTableId,
           status: 'pending',
-          user_name: localStorage.getItem('ez_menu_client_name') || 'Cliente',
+          customer_name: clientName,
           establishment_id: establishmentId
         })
         .select().single();
@@ -277,8 +292,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         quantity: item.quantity,
         status: 'sent',
         observation: item.observation,
-        price: item.price,
-        establishment_id: establishmentId
+        price: item.isRodizio ? 0 : item.price, // Rodizio food items are R$ 0
       }));
 
       const { error: itemsError } = await supabase.from('order_items').insert(orderItemsToInsert);
@@ -286,8 +300,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
       setCart([]);
       fetchSentOrders();
+      toast.success("Pedido enviado com sucesso!");
     } catch (e) {
       console.error("Failed to send order", e);
+      toast.error("Erro ao enviar pedido.");
     }
   }, [cart, session, establishmentId, fetchSentOrders]);
 
@@ -301,15 +317,26 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const clearRecentOrders = useCallback(() => setRecentOrders([]), []);
 
+  const clearTableSession = useCallback(() => {
+    setSession(null);
+    localStorage.removeItem('ez_menu_table_name');
+  }, []);
+
   const addDirectlyToSentOrders = useCallback(async (items: OrderItem[]) => {
-    if (!establishmentId) return;
+    if (!establishmentId) {
+      toast.error("Erro: Estabelecimento não identificado.");
+      return;
+    }
     try {
+      const currentTableId = session?.tableName || localStorage.getItem('ez_menu_table_name');
+      const clientName = localStorage.getItem('ez_menu_client_name') || 'Cliente';
+
       const { data: orderData, error: orderError } = await supabase
         .from('orders')
         .insert({
-          table_id: session?.tableName || localStorage.getItem('ez_menu_table_name'),
+          table_id: currentTableId,
           status: 'sent',
-          user_name: localStorage.getItem('ez_menu_client_name') || 'Sistema',
+          user_name: clientName,
           establishment_id: establishmentId
         })
         .select().single();
@@ -330,8 +357,44 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       fetchSentOrders();
     } catch (e) {
       console.error("Failed to persist system items", e);
+      toast.error("Erro ao processar rodízio.");
     }
   }, [session, establishmentId, fetchSentOrders]);
+
+  const callService = useCallback(async (type: 'waiter' | 'machine') => {
+    if (!establishmentId) {
+      toast.error("Erro: Estabelecimento não identificado.");
+      return;
+    }
+
+    try {
+      const currentTableId = localStorage.getItem('ez_menu_table_name') || 'Mesa';
+      const participants = JSON.parse(localStorage.getItem('ez_menu_table_participants') || '[]');
+      const myName = participants.find((p: any) => p.isMe)?.name || localStorage.getItem('ez_menu_client_name') || 'Cliente';
+
+      const { error } = await supabase.from('service_requests').insert({
+        type,
+        status: 'pending',
+        table_id: currentTableId,
+        user_name: myName,
+        establishment_id: establishmentId
+      });
+
+      if (error) throw error;
+
+      if (type === 'machine') {
+        await supabase.from('restaurant_tables')
+          .update({ status: 'waiting_payment' })
+          .eq('id', currentTableId)
+          .eq('establishment_id', establishmentId);
+      }
+
+      toast.success(type === 'machine' ? "Maquininha solicitada!" : "Garçom chamado!");
+    } catch (error) {
+      console.error("Error calling service:", error);
+      toast.error("Erro ao solicitar serviço.");
+    }
+  }, [establishmentId]);
 
   return (
     <OrderContext.Provider value={{
@@ -340,6 +403,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       currentClientId, setCurrentClientId, favorites, addToFavorites, removeFromFavorites,
       sentOrders, sendOrder, recentOrders, clearRecentOrders, addDirectlyToSentOrders,
       establishmentId,
+      settings,
+      clearTableSession,
+      callService,
       resetTableOrders: async (tableId: string) => {
         if (!establishmentId) return;
         await supabase.from('orders').update({ status: 'completed' })

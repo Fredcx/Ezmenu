@@ -1,7 +1,6 @@
 import { useState } from 'react';
-import { Bell, Utensils, Receipt, Sparkles, Check, Clock, CreditCard, ChevronRight } from 'lucide-react';
-import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase';
+import { Bell, Check, Clock, CreditCard, ChevronRight } from 'lucide-react';
+import { useOrder } from '@/contexts/OrderContext';
 
 interface ServiceOption {
     id: string;
@@ -14,6 +13,7 @@ interface ServiceOption {
 
 export function ServiceScreen() {
     const [activeRequest, setActiveRequest] = useState<string | null>(null);
+    const { callService } = useOrder();
 
     const options: ServiceOption[] = [
         {
@@ -34,43 +34,9 @@ export function ServiceScreen() {
         }
     ];
 
-    const handleRequest = (id: string) => {
+    const handleRequest = async (id: string) => {
         setActiveRequest(id);
-
-        try {
-            const participants = JSON.parse(localStorage.getItem('ez_menu_table_participants') || '[]');
-            const myName = participants.find((p: any) => p.isMe)?.name || 'Cliente';
-            const tableName = localStorage.getItem('ez_menu_table_name') || 'Mesa';
-
-            const newRequest = {
-                id: Date.now().toString(),
-                type: id,
-                status: 'pending',
-                timestamp: Date.now(),
-                table_id: tableName,
-                customer_name: myName
-            };
-
-            // 1. Save to service_requests (Supabase)
-            supabase.from('service_requests').insert(newRequest).then(({ error }) => {
-                if (error) console.error("Error sending request to Supabase", error);
-            });
-
-            // 2. If machine, update table status
-            if (id === 'machine') {
-                supabase.from('restaurant_tables')
-                    .update({ status: 'waiting_payment' })
-                    .eq('id', tableName)
-                    .then(({ error }) => {
-                        if (error) console.error("Error updating table status", error);
-                    });
-            }
-
-            toast.success("Solicitação enviada!");
-        } catch (error) {
-            console.error("Erro ao solicitar serviço", error);
-            toast.error("Erro ao solicitar serviço.");
-        }
+        await callService(id as 'waiter' | 'machine');
 
         // Visual feedback timer
         setTimeout(() => {
@@ -81,7 +47,7 @@ export function ServiceScreen() {
     return (
         <div className="h-full flex flex-col bg-background/50 relative overflow-hidden">
             {/* Ambient Background */}
-            <div className="absolute top-0 left-0 w-full h-[500px] bg-primary/5 rounded-b-[100px] blur-3xl pointer-events-none" />
+            <div className="absolute top-0 left-0 w-full h-[500px] bg-primary opacity-[0.03] rounded-b-[100px] blur-3xl pointer-events-none" />
 
             {/* Header */}
             <div className="px-6 pt-8 pb-4 relative z-10 text-center">
@@ -102,7 +68,7 @@ export function ServiceScreen() {
                         className={`
                             group relative w-full max-w-sm overflow-hidden py-8 rounded-[2.5rem]
                             transition-all duration-500 flex items-center px-10 gap-6 glass-card
-                            ${activeRequest === option.id ? 'scale-95 border-primary/50' : 'hover:scale-105 active:scale-95 hover:border-primary/30'}
+                            ${activeRequest === option.id ? 'scale-95 border-primary/50' : 'md:hover:scale-105 active:scale-95 hover:border-primary/30'}
                             ${activeRequest && activeRequest !== option.id ? 'opacity-40 grayscale' : ''}
                         `}
                     >

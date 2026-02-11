@@ -41,7 +41,7 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
   const isOutOfStock = availability === 'out_of_stock';
   const isLowStock = availability === 'low_stock';
 
-  const isBlocked = (item.isRodizio && isRoundLimitReached && quantity === 0) || isOutOfStock || !hasTable;
+  const isBlocked = isOutOfStock || !hasTable || (item.isRodizio && isRoundLimitReached && quantity === 0);
 
   const handleRemove = () => {
     const itemInCart = cart.find(i => i.id === targetId && i.addedBy === currentClientId);
@@ -78,8 +78,8 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
   return (
     <>
       <div
-        onClick={onClick}
-        className={`product-card w-full flex bg-card rounded-[2rem] p-4 border border-border/40 mb-4 relative overflow-visible transition-premium hover:shadow-premium hover:-translate-y-0.5 active:scale-[0.98] cursor-pointer shadow-sm ${isBlocked ? 'opacity-50 grayscale' : ''}`}
+        onClick={hasTable ? onClick : undefined}
+        className={`product-card w-full flex bg-card rounded-[2rem] p-4 border border-border/40 mb-4 relative overflow-visible transition-premium hover:shadow-premium hover:-translate-y-0.5 active:scale-[0.98] ${hasTable ? 'cursor-pointer' : 'cursor-default'} shadow-sm ${isBlocked && (hasTable || isOutOfStock) ? 'opacity-50 grayscale' : ''}`}
       >
 
         {/* Left Side: Text Content */}
@@ -104,10 +104,17 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
             {/* Price & Icons Group */}
             <div className="flex flex-col gap-2">
               {/* Price if applicable */}
-              {(!item.isRodizio || isAlacarte) && (
+              {(!item.isRodizio || isAlacarte) ? (
                 <span className="font-black text-primary text-lg tracking-tight">
                   R$ {item.price.toFixed(2)}
                 </span>
+              ) : (
+                <div className="flex items-center gap-2">
+                  <span className="font-black text-emerald-600 text-[10px] uppercase tracking-widest bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100 flex items-center gap-1.5 shadow-sm">
+                    <ChefHat className="w-3 h-3" />
+                    Incluso
+                  </span>
+                </div>
               )}
 
               <div className="flex items-center gap-2">
@@ -126,13 +133,7 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
                   </div>
                 )}
 
-                {/* Edit Button (if customizable) */}
-                <button
-                  onClick={(e) => { e.stopPropagation(); setIsNoteOpen(true); }}
-                  className="w-6 h-6 rounded-xl bg-secondary text-primary flex items-center justify-center border border-primary/10 hover:bg-primary hover:text-white transition-premium shadow-sm shadow-primary/5 active:scale-90"
-                >
-                  <Pencil className="w-3 h-3" />
-                </button>
+                {/* Edit Button removed as per user request (moved to cart) */}
               </div>
             </div>
           </div>
@@ -150,36 +151,38 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
           </div>
 
           {/* Floating Quantity/Add Controls */}
-          <div className="absolute -bottom-1 -right-1">
-            {quantity > 0 ? (
-              <div className="flex items-center bg-white/95 backdrop-blur-md rounded-2xl border border-border shadow-premium overflow-hidden h-10 animate-in slide-in-from-right-2 duration-300">
-                <button
-                  onClick={(e) => { e.stopPropagation(); handleRemove(); }}
-                  className="w-10 h-10 flex items-center justify-center text-primary hover:bg-red-50 transition-premium active:scale-90"
-                >
-                  <Minus className="w-4 h-4" />
-                </button>
-                <div className="w-6 text-center">
-                  <span className="font-black text-sm tabular-nums">{quantity}</span>
+          {hasTable && (
+            <div className="absolute -bottom-1 -right-1">
+              {quantity > 0 ? (
+                <div className="flex items-center bg-white/95 backdrop-blur-md rounded-2xl border border-border shadow-premium overflow-hidden h-10 animate-in slide-in-from-right-2 duration-300">
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleRemove(); }}
+                    className="w-10 h-10 flex items-center justify-center text-primary hover:bg-red-50 transition-premium active:scale-90"
+                  >
+                    <Minus className="w-4 h-4" />
+                  </button>
+                  <div className="w-6 text-center">
+                    <span className="font-black text-sm tabular-nums">{quantity}</span>
+                  </div>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); handleAdd(); }}
+                    disabled={isBlocked}
+                    className="w-10 h-10 flex items-center justify-center bg-primary text-white hover:brightness-110 transition-premium shadow-lg shadow-primary/20 active:scale-90"
+                  >
+                    <Plus className="w-4 h-4" />
+                  </button>
                 </div>
+              ) : (
                 <button
                   onClick={(e) => { e.stopPropagation(); handleAdd(); }}
                   disabled={isBlocked}
-                  className="w-10 h-10 flex items-center justify-center bg-primary text-white hover:brightness-110 transition-premium shadow-lg shadow-primary/20 active:scale-90"
+                  className="w-11 h-11 rounded-2xl bg-white border border-border/60 shadow-premium flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-premium active:scale-90 group"
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="w-6 h-6 group-hover:rotate-90 transition-transform duration-500" />
                 </button>
-              </div>
-            ) : (
-              <button
-                onClick={(e) => { e.stopPropagation(); handleAdd(); }}
-                disabled={isBlocked}
-                className="w-11 h-11 rounded-2xl bg-white border border-border/60 shadow-premium flex items-center justify-center text-primary hover:bg-primary hover:text-white transition-premium active:scale-90 group"
-              >
-                <Plus className="w-6 h-6 group-hover:rotate-90 transition-transform duration-500" />
-              </button>
-            )}
-          </div>
+              )}
+            </div>
+          )}
         </div>
 
       </div>

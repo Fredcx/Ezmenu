@@ -1,6 +1,7 @@
-import { ArrowLeft, Trash2, Send, ChefHat, ShoppingCart as CartIcon, Minus, Plus, Check, AlertCircle, Fish } from 'lucide-react';
+import { ArrowLeft, Trash2, Send, ChefHat, ShoppingCart as CartIcon, Minus, Plus, Check, AlertCircle, Fish, Pencil, Utensils } from 'lucide-react';
 import { useInventory } from '@/contexts/InventoryContext';
 import { useOrder } from '@/contexts/OrderContext';
+import { toast } from 'sonner';
 import React, { useMemo } from 'react';
 
 interface CartViewProps {
@@ -31,17 +32,26 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
   const otherClientItems = cart.filter(item => item.addedBy !== currentClientId);
   const allSentItems = sentOrders;
 
-  const grandTotal = useMemo(() => {
-    const cartTotal = cart.reduce((sum, item) => sum + (item.isRodizio ? 0 : item.price * item.quantity), 0);
-    const sentTotal = sentOrders.reduce((sum, item) => sum + (item.isRodizio ? 0 : item.price * item.quantity), 0);
-    return cartTotal + sentTotal;
-  }, [cart, sentOrders]);
+  const rodizioCovers = useMemo(() => {
+    return sentOrders.filter(i => i.id.startsWith('rodizio-'));
+  }, [sentOrders]);
+
+  const alacarteSentItems = useMemo(() => {
+    return sentOrders.filter(i => !i.id.startsWith('rodizio-') && i.category !== 'system');
+  }, [sentOrders]);
+
+  const rodizioTotal = useMemo(() => {
+    return rodizioCovers.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  }, [rodizioCovers]);
+
+  const alacarteTotal = useMemo(() => {
+    const cartAlacarte = cart.reduce((sum, item) => sum + (item.isRodizio ? 0 : item.price * item.quantity), 0);
+    const sentAlacarte = alacarteSentItems.reduce((sum, item) => sum + (item.isRodizio ? 0 : item.price * item.quantity), 0);
+    return cartAlacarte + sentAlacarte;
+  }, [cart, alacarteSentItems]);
 
   const handleSend = () => {
     if (cart.length > 0) {
-      // Stock deduction moved to Kitchen completion as per user request
-      // deductStockForOrder(itemsToDeduct);
-
       sendOrder();
     }
   };
@@ -125,7 +135,19 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                     <div className="flex-1 min-w-0 flex flex-col justify-between py-1">
                       <div>
                         <div className="flex items-start justify-between gap-2">
-                          <h4 className="font-bold text-base leading-tight truncate pr-2">{item.name}</h4>
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <h4 className="font-bold text-base leading-tight truncate">{item.name}</h4>
+                            <button
+                              onClick={() => {
+                                // Logic to open customization modal in cart (could reuse ProductDetailsModal if needed)
+                                // For now, we'll just indicate it's possible
+                                toast.info("Funcionalidade de edição no carrinho em breve!");
+                              }}
+                              className="w-5 h-5 rounded-lg bg-secondary text-primary flex items-center justify-center shrink-0"
+                            >
+                              <Pencil className="w-2.5 h-2.5" />
+                            </button>
+                          </div>
                           <button
                             onClick={() => removeFromCart(item.id, item.addedBy)}
                             className="text-muted-foreground hover:text-destructive transition-colors shrink-0 p-1 -mt-1 -mr-1"
@@ -149,7 +171,12 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                       </div>
 
                       <div className="mt-2 text-primary font-bold text-sm">
-                        {item.isRodizio ? 'Rodízio' : `R$ ${(item.price * item.quantity).toFixed(2)}`}
+                        {item.isRodizio ? (
+                          <span className="text-emerald-600 flex items-center gap-1">
+                            <ChefHat className="w-3 h-3" />
+                            Incluso no Rodízio
+                          </span>
+                        ) : `R$ ${(item.price * item.quantity).toFixed(2)}`}
                       </div>
                     </div>
 
@@ -196,47 +223,73 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
 
       </div>
 
-      {/* Footer - Fixed Bottom */}
-      <div className="absolute bottom-[80px] left-0 right-0 p-4 pb-6 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t border-border z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
-        <div className="max-w-3xl mx-auto flex items-center justify-between gap-4">
-          {cart.length > 0 ? (
-            <>
-              <div className="flex flex-col">
-                <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Confirmado</span>
-                <span className="text-2xl font-bold text-primary">R$ {grandTotal.toFixed(2)}</span>
-              </div>
-              <button
-                onClick={handleSend}
-                className="flex-1 max-w-[200px] h-14 bg-primary text-primary-foreground text-lg font-bold rounded-2xl shadow-lg shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
-              >
-                <span>Pedir</span>
-                <CartIcon className="w-5 h-5 fill-current opacity-50" />
-              </button>
-            </>
-          ) : (
-            <div className="w-full flex justify-between items-center gap-3">
-              <div className="shrink-0 flex flex-col">
-                <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total Final</span>
-                <div className="text-2xl font-black text-foreground tracking-tight">R$ {grandTotal.toFixed(2)}</div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button onClick={onBack} className="px-4 py-3 rounded-xl bg-secondary/80 hover:bg-secondary font-semibold text-xs transition-colors">
-                  Voltar
-                </button>
-                <button
-                  onClick={onPayment}
-                  className="group relative px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 overflow-hidden"
-                >
-                  <span className="relative z-10 flex items-center gap-3">
-                    <span>FECHAR CONTA</span>
-                    <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
-                      <Check className="w-3.5 h-3.5" />
-                    </div>
+      <div className="fixed bottom-[80px] left-0 right-0 p-4 pb-6 bg-gradient-to-t from-background via-background to-background/95 backdrop-blur-lg border-t border-border z-50 shadow-[0_-4px_20px_rgba(0,0,0,0.05)]">
+        <div className="max-w-3xl mx-auto space-y-4">
+          {/* Price Breakdown */}
+          {(rodizioTotal > 0 || alacarteTotal > 0) && (
+            <div className="flex flex-col gap-1.5 px-2 mb-2 animate-in fade-in slide-in-from-bottom-2 duration-500">
+              {rodizioCovers.length > 0 && (
+                <div className="flex justify-between text-xs font-medium text-emerald-600">
+                  <span className="flex items-center gap-1">
+                    <Fish className="w-3 h-3" />
+                    Rodízio ({rodizioCovers.length} {rodizioCovers.length === 1 ? 'pessoa' : 'pessoas'})
                   </span>
-                </button>
-              </div>
+                  <span>R$ {rodizioTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {alacarteTotal > 0 && (
+                <div className="flex justify-between text-xs font-medium text-primary">
+                  <span className="flex items-center gap-1">
+                    <Utensils className="w-3 h-3" />
+                    Itens À La Carte / Drinks
+                  </span>
+                  <span>R$ {alacarteTotal.toFixed(2)}</span>
+                </div>
+              )}
+              <div className="h-px bg-border/50 my-1" />
             </div>
           )}
+
+          <div className="flex items-center justify-between gap-4">
+            {cart.length > 0 ? (
+              <>
+                <div className="flex flex-col">
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Acumulado</span>
+                  <span className="text-2xl font-bold text-primary">R$ {(rodizioTotal + alacarteTotal).toFixed(2)}</span>
+                </div>
+                <button
+                  onClick={handleSend}
+                  className="flex-1 max-w-[200px] h-14 bg-primary text-primary-foreground text-lg font-bold rounded-2xl shadow-lg shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                >
+                  <span>Pedir</span>
+                  <CartIcon className="w-5 h-5 fill-current opacity-50" />
+                </button>
+              </>
+            ) : (
+              <div className="w-full flex justify-between items-center gap-3">
+                <div className="shrink-0 flex flex-col">
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total da Mesa</span>
+                  <div className="text-2xl font-black text-foreground tracking-tight">R$ {(rodizioTotal + alacarteTotal).toFixed(2)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button onClick={onBack} className="px-4 py-3 rounded-xl bg-secondary/80 hover:bg-secondary font-semibold text-xs transition-colors">
+                    Voltar
+                  </button>
+                  <button
+                    onClick={onPayment}
+                    className="group relative px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 overflow-hidden"
+                  >
+                    <span className="relative z-10 flex items-center gap-3">
+                      <span>FECHAR CONTA</span>
+                      <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
+                        <Check className="w-3.5 h-3.5" />
+                      </div>
+                    </span>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </div>
     </div >
@@ -248,8 +301,8 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
 // ----------------------------------------------------------------------
 const SentOrdersTabs = ({ items }: { items: any[] }) => {
   const [activeTab, setActiveTab] = React.useState<'pending' | 'delivered'>('pending');
-  // Filter out 'system' items (Rodizio covers) from display
-  const visibleItems = items.filter(i => i.category !== 'system');
+  // Filter out rodizio covers and system items for list display
+  const visibleItems = items.filter(i => !i.id.startsWith('rodizio-') && i.category !== 'system');
   const pendingItems = visibleItems.filter(i => i.status !== 'ready' && i.status !== 'completed');
   const deliveredItems = visibleItems.filter(i => i.status === 'ready' || i.status === 'completed');
 

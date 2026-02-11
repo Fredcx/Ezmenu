@@ -200,7 +200,7 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                         )}
                     </button>
 
-                    <div className="text-center pt-2">
+                    <div className="text-center pt-2 space-y-4">
                         <button
                             onClick={() => {
                                 setMode(mode === 'login' ? 'register' : 'login');
@@ -213,6 +213,19 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                             ) : (
                                 <><ArrowLeft className="w-3 h-3" /> Já tenho conta. <span className="text-primary font-bold">Voltar ao login</span></>
                             )}
+                        </button>
+
+                        <div className="flex items-center gap-4 px-4">
+                            <div className="h-px flex-1 bg-white/5" />
+                            <span className="text-[8px] font-black text-white/20 uppercase tracking-[0.2em]">ou</span>
+                            <div className="h-px flex-1 bg-white/5" />
+                        </div>
+
+                        <button
+                            onClick={() => onAccessGranted('Visitante', '')}
+                            className="text-[10px] font-black uppercase tracking-[0.2em] text-white/40 hover:text-primary transition-colors py-2 px-8 rounded-xl border border-white/5 hover:border-primary/20 hover:bg-primary/5 mx-auto block"
+                        >
+                            Continuar como Visitante
                         </button>
                     </div>
                 </div>

@@ -10,7 +10,7 @@ interface PaymentScreenProps {
 }
 
 export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
-    const { sentOrders, cart } = useOrder();
+    const { sentOrders, cart, callService } = useOrder();
     const [step, setStep] = useState<'receipt' | 'payment'>('receipt');
     const [showWaiterModal, setShowWaiterModal] = useState(false);
     const [requestType, setRequestType] = useState<'waiter' | 'machine'>('waiter');
@@ -110,28 +110,8 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
     }, [allItems]);
 
     const handleCallWaiter = async () => {
-        try {
-            const myName = 'Cliente'; // In a real app, get from session/auth
-            const tableId = localStorage.getItem('ez_menu_table_name') || 'MESA';
-
-            const { error } = await supabase.from('service_requests').insert({
-                type: requestType,
-                status: 'pending',
-                table_id: tableId,
-                user_name: myName
-            });
-
-            if (error) throw error;
-
-            toast.success(requestType === 'machine' ? 'Solicitação de maquininha enviada!' : 'Garçom chamado com sucesso! Aguarde um momento.', {
-                position: 'top-center',
-                duration: 3000,
-            });
-            setShowWaiterModal(false);
-        } catch (error) {
-            console.error(error);
-            toast.error("Erro ao chamar serviço");
-        }
+        await callService(requestType);
+        setShowWaiterModal(false);
     };
 
     const handleBack = () => {

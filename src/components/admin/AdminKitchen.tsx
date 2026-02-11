@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { useParams } from 'react-router-dom';
 import { Clock, CheckCircle2, ChefHat, Bell, UtensilsCrossed, Wine, Fish, Trash2, User, CreditCard, BellRing } from 'lucide-react';
 import { toast } from 'sonner';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
@@ -18,12 +19,19 @@ import { useInventory } from '@/contexts/InventoryContext';
 
 export function AdminKitchen() {
     const { deductStockForOrder } = useInventory();
+    const { slug } = useParams();
     const [orders, setOrders] = useState<Order[]>([]);
     const [currentTime, setCurrentTime] = useState(Date.now());
     const [activeTab, setActiveTab] = useState("all");
+    const [prevServiceCount, setPrevServiceCount] = useState(0);
+    const [prevOrderCount, setPrevOrderCount] = useState(0);
 
     const fetchOrders = async () => {
         try {
+            // Get establishment ID from slug
+            const { data: est } = await supabase.from('establishments').select('id').eq('slug', slug).single();
+            if (!est) return;
+
             const { data: ordersData, error } = await supabase
                 .from('orders')
                 .select(`
@@ -39,6 +47,7 @@ export function AdminKitchen() {
                         )
                     )
                 `)
+                .eq('establishment_id', est.id)
                 .neq('status', 'cancelled')
                 .order('created_at', { ascending: false });
 
@@ -318,11 +327,15 @@ export function AdminKitchen() {
 
     const [serviceRequests, setServiceRequests] = useState<{ id: string, type: 'waiter' | 'machine', status: 'pending' | 'completed', timestamp: number, tableId: string, userName?: string }[]>([]);
 
-    const fetchServiceRequests = async () => {
+    const [establishmentId, setEstablishmentId] = useState<string | null>(null);
+
+    // Fetch requests logic (abstracted to avoid dependency on establishmentId state)
+    const fetchRequestsForId = useCallback(async (id: string) => {
         try {
             const { data, error } = await supabase
                 .from('service_requests')
                 .select('*')
+                .eq('establishment_id', id)
                 .eq('status', 'pending')
                 .order('created_at', { ascending: true });
 
@@ -338,18 +351,49 @@ export function AdminKitchen() {
         } catch (e) {
             console.error("Failed to fetch service requests", e);
         }
-    };
+    }, []);
 
     useEffect(() => {
-        fetchServiceRequests();
-        const channel = supabase.channel('service_requests')
-            .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests' }, () => fetchServiceRequests())
+        // 1. If no ID, fetch it first
+        if (!establishmentId) {
+            if (slug) {
+                supabase.from('establishments').select('id').eq('slug', slug).single()
+                    .then(({ data }) => {
+                        if (data) setEstablishmentId(data.id);
+                    });
+            }
+            return;
+        }
+
+        // 2. Initial Fetch
+        fetchRequestsForId(establishmentId);
+
+        // 3. Subscribe
+        console.log("Subscribing to kitchen requests for:", establishmentId);
+        const channel = supabase.channel(`kitchen_sync_${establishmentId}`)
+            .on('postgres_changes',
+                {
+                    event: '*',
+                    schema: 'public',
+                    table: 'service_requests',
+                    filter: `establishment_id=eq.${establishmentId}`
+                },
+                (payload) => {
+                    console.log("Kitchen Update:", payload);
+                    if (payload.eventType === 'INSERT') {
+                        const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
+                        audio.play().catch(e => console.warn("Audio play failed", e));
+                        toast.info("Nova solicitação de serviço!");
+                    }
+                    fetchRequestsForId(establishmentId);
+                }
+            )
             .subscribe();
 
         return () => {
             supabase.removeChannel(channel);
         };
-    }, []);
+    }, [establishmentId, slug, fetchRequestsForId]);
 
     const completeRequest = async (id: string) => {
         try {
@@ -360,6 +404,8 @@ export function AdminKitchen() {
 
             if (error) throw error;
             toast.success("Solicitação atendida!");
+            // Optimistic update or wait for realtime
+            if (establishmentId) fetchRequestsForId(establishmentId);
         } catch (e) {
             console.error(e);
             toast.error("Erro ao atender solicitação");
@@ -389,6 +435,26 @@ export function AdminKitchen() {
                 </TabsList>
 
                 <TabsContent value="all" className="flex-1 mt-0">
+                    {/* Active Service Requests Summary */}
+                    {serviceRequests.length > 0 && (
+                        <div className="mb-6 flex flex-wrap gap-3">
+                            {serviceRequests.map(req => (
+                                <div
+                                    key={req.id}
+                                    onClick={() => setActiveTab('service')}
+                                    className="flex items-center gap-3 bg-red-50 border border-red-200 p-3 rounded-xl cursor-pointer hover:bg-red-100 transition-colors animate-pulse"
+                                >
+                                    <div className={`p-2 rounded-full ${req.type === 'machine' ? 'bg-orange-100 text-orange-600' : 'bg-red-100 text-red-600'}`}>
+                                        {req.type === 'machine' ? <CreditCard className="w-4 h-4" /> : <Bell className="w-4 h-4" />}
+                                    </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-xs font-black uppercase text-red-700">Mesa {req.tableId}</span>
+                                        <span className="text-[10px] font-bold text-red-600/80">{req.type === 'machine' ? 'Maquininha' : 'Garçom'}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                     <RenderOrders tab="all" />
                 </TabsContent>
                 <TabsContent value="sushi" className="flex-1 mt-0">
