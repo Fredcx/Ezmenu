@@ -1,6 +1,7 @@
 import { BookOpen, Filter, Search, ChevronDown } from 'lucide-react';
 import { categories } from '@/data/menuData';
 import { useState } from 'react';
+import { useOrder } from '@/contexts/OrderContext';
 
 interface MenuHeaderProps {
   selectedMenu: string;
@@ -9,20 +10,26 @@ interface MenuHeaderProps {
   onSearchClick: () => void;
 }
 
-const menus = [
-  { id: 'rodizio', name: 'Rodízio' },
-  { id: 'alacarte', name: 'À La Carte' },
-  { id: 'desserts', name: 'Sobremesas' },
-  { id: 'drinks', name: 'Bebidas' },
-];
-
 export function MenuHeader({
   selectedMenu,
   onMenuChange,
   onFilterClick,
   onSearchClick
 }: MenuHeaderProps) {
+  const { restaurantType } = useOrder();
   const [showDropdown, setShowDropdown] = useState(false);
+
+  const menus = [
+    { id: 'rodizio', name: restaurantType === 'steakhouse' ? 'Rodízio de Carnes' : 'Rodízio' },
+    { id: 'alacarte', name: 'À La Carte' },
+    { id: 'desserts', name: 'Sobremesas' },
+    { id: 'drinks', name: 'Bebidas' },
+  ];
+
+  if (restaurantType === 'general') {
+    // Remove Rodizio option for general restaurants
+    menus.shift();
+  }
 
   const currentMenu = menus.find(m => m.id === selectedMenu) || menus[0];
 

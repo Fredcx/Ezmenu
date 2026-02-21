@@ -25,6 +25,7 @@ export const AdminDiscovery = () => {
         show_queue: false,
         show_reservations: false
     });
+    const [restaurantType, setRestaurantType] = useState<'sushi' | 'steakhouse' | 'general'>('sushi');
     const [rodizioPriceAdult, setRodizioPriceAdult] = useState(129.99);
     const [rodizioPriceChild, setRodizioPriceChild] = useState(69.99);
 
@@ -52,6 +53,7 @@ export const AdminDiscovery = () => {
                     show_queue: data.show_queue,
                     show_reservations: data.show_reservations
                 });
+                setRestaurantType(data.restaurant_type || 'sushi');
                 setRodizioPriceAdult(data.rodizio_price_adult || 129.99);
                 setRodizioPriceChild(data.rodizio_price_child || 69.99);
             }
@@ -73,6 +75,7 @@ export const AdminDiscovery = () => {
                     max_reservations_per_slot: maxCapacity,
                     reservation_start_time: reservationStart,
                     reservation_end_time: reservationEnd,
+                    restaurant_type: restaurantType,
                     rodizio_price_adult: rodizioPriceAdult,
                     rodizio_price_child: rodizioPriceChild,
                     ...toggles
@@ -147,6 +150,26 @@ export const AdminDiscovery = () => {
                                     onChange={(e) => setAddress(e.target.value)}
                                     className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
                                 />
+                            </div>
+                        </div>
+
+                        <div className="space-y-4 pt-2">
+                            <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Tipo de Restaurante</label>
+                            <div className="grid grid-cols-3 gap-3">
+                                {[
+                                    { id: 'sushi', label: 'Sushi', icon: Store },
+                                    { id: 'steakhouse', label: 'Churrascaria', icon: Store },
+                                    { id: 'general', label: 'Geral (À La Carte)', icon: Store }
+                                ].map((type) => (
+                                    <button
+                                        key={type.id}
+                                        onClick={() => setRestaurantType(type.id as any)}
+                                        className={`p-4 rounded-2xl border-2 transition-all flex flex-col items-center gap-2 ${restaurantType === type.id ? 'bg-primary/5 border-primary text-primary' : 'bg-secondary/20 border-transparent text-muted-foreground'}`}
+                                    >
+                                        <type.icon className="w-5 h-5" />
+                                        <span className="text-[10px] font-black uppercase tracking-tight">{type.label}</span>
+                                    </button>
+                                ))}
                             </div>
                         </div>
 
@@ -227,41 +250,43 @@ export const AdminDiscovery = () => {
                         </div>
                     </section>
 
-                    <section className="bg-white p-8 rounded-[2.5rem] shadow-premium border border-border/40 space-y-6">
-                        <h3 className="text-lg font-black uppercase italic tracking-widest text-foreground/80 flex items-center gap-2">
-                            <DollarSign className="w-5 h-5 text-primary" /> Preços do Rodízio
-                        </h3>
+                    {restaurantType !== 'general' && (
+                        <section className="bg-white p-8 rounded-[2.5rem] shadow-premium border border-border/40 space-y-6">
+                            <h3 className="text-lg font-black uppercase italic tracking-widest text-foreground/80 flex items-center gap-2">
+                                <DollarSign className="w-5 h-5 text-primary" /> Preços do Rodízio
+                            </h3>
 
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Preço Adulto (R$)</label>
-                                <div className="relative">
-                                    <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40" />
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={rodizioPriceAdult}
-                                        onChange={(e) => setRodizioPriceAdult(parseFloat(e.target.value))}
-                                        className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
-                                    />
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Preço Adulto (R$)</label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40" />
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={rodizioPriceAdult}
+                                            onChange={(e) => setRodizioPriceAdult(parseFloat(e.target.value))}
+                                            className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-2">
+                                    <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Preço Criança (R$)</label>
+                                    <div className="relative">
+                                        <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40" />
+                                        <Input
+                                            type="number"
+                                            step="0.01"
+                                            value={rodizioPriceChild}
+                                            onChange={(e) => setRodizioPriceChild(parseFloat(e.target.value))}
+                                            className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
+                                        />
+                                    </div>
                                 </div>
                             </div>
-
-                            <div className="space-y-2">
-                                <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-2">Preço Criança (R$)</label>
-                                <div className="relative">
-                                    <DollarSign className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/40" />
-                                    <Input
-                                        type="number"
-                                        step="0.01"
-                                        value={rodizioPriceChild}
-                                        onChange={(e) => setRodizioPriceChild(parseFloat(e.target.value))}
-                                        className="pl-12 h-14 rounded-2xl border-border/40 focus:ring-primary/20 font-bold"
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    </section>
+                        </section>
+                    )}
                 </div>
 
                 {/* Right Column: Visibilities */}

@@ -58,6 +58,7 @@ interface OrderContextType {
   addDirectlyToSentOrders: (items: OrderItem[]) => void;
   resetTableOrders: (tableId: string) => void;
   establishmentId: string | null;
+  restaurantType: 'sushi' | 'steakhouse' | 'general';
   settings: any | null;
   clearTableSession: () => void;
   callService: (type: 'waiter' | 'machine') => Promise<void>;
@@ -80,6 +81,7 @@ const defaultFavorites: MenuItem[] = [
 
 export function OrderProvider({ children }: { children: ReactNode }) {
   const [establishmentId, setEstablishmentId] = useState<string | null>(null);
+  const [restaurantType, setRestaurantType] = useState<'sushi' | 'steakhouse' | 'general'>('sushi');
   const [settings, setSettings] = useState<any | null>(null);
   const [session, setSession] = useState<TableSession | null>(null);
   const [cart, setCart] = useState<OrderItem[]>([]);
@@ -105,6 +107,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
       if (establishment) {
         setEstablishmentId(establishment.id);
+        setRestaurantType(establishment.restaurant_type || 'sushi');
         setSettings(establishment);
         localStorage.setItem('ez_menu_establishment_id', establishment.id);
 
@@ -403,6 +406,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       currentClientId, setCurrentClientId, favorites, addToFavorites, removeFromFavorites,
       sentOrders, sendOrder, recentOrders, clearRecentOrders, addDirectlyToSentOrders,
       establishmentId,
+      restaurantType,
       settings,
       clearTableSession,
       callService,

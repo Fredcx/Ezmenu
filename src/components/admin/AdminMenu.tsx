@@ -5,7 +5,8 @@ import { Plus, Edit2, Trash2, Search, X, Check, Image as ImageIcon } from 'lucid
 import { toast } from 'sonner';
 
 export function AdminMenu() {
-    const { items, categories, alacarteCategories, addItem, updateItem, deleteItem } = useMenu();
+    const { items, categories, alacarteCategories, addItem, updateItem, deleteItem, isLoading } = useMenu();
+    const allCategories = [...categories, ...alacarteCategories].filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [isModalOpen, setIsModalOpen] = useState(false);
@@ -17,7 +18,7 @@ export function AdminMenu() {
         description: '',
         price: 0,
         image: '',
-        category: 'entradas',
+        category: allCategories[0]?.id || '',
         isRodizio: true,
         station: 'kitchen'
     });
@@ -49,7 +50,7 @@ export function AdminMenu() {
             description: '',
             price: 0,
             image: '',
-            category: 'entradas',
+            category: allCategories[0]?.id || '',
             isRodizio: true,
             station: 'kitchen',
             code: `P${Math.floor(Math.random() * 1000)}`
@@ -76,10 +77,8 @@ export function AdminMenu() {
         setIsModalOpen(false);
     };
 
-    const allCategories = [...categories, ...alacarteCategories].filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
 
     // Loading State
-    const { isLoading } = useMenu();
     if (isLoading) {
         return (
             <div className="space-y-8 animate-in fade-in duration-500">

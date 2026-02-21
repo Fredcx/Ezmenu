@@ -127,15 +127,17 @@ function AppContent() {
       case 'alacarte':
         setInitialMenu('alacarte');
         setActiveTab('menu');
+        // Handle restaurant occupants if coming from landing-direct
+        if (!hasStarted) setHasStarted(true);
         break;
       case 'wines':
-        setInitialMenu('drinks'); // Map wines to drinks or specific category if exists
-        setMenuCategory('vinhos'); // Assuming 'vinhos' is the category slug for wines
+        setInitialMenu('drinks');
+        setMenuCategory('vinhos');
         setActiveTab('menu');
         break;
       case 'cocktails':
         setInitialMenu('drinks');
-        setMenuCategory('drinks'); // specific category
+        setMenuCategory('drinks');
         setActiveTab('menu');
         break;
     }

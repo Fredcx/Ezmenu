@@ -16,6 +16,7 @@ import { AdminInventory } from "@/components/admin/AdminInventory";
 import { AdminRecipes } from "./components/admin/AdminRecipes";
 import { AdminConsumption } from "./components/admin/AdminConsumption";
 import { AdminDiscovery } from "./components/admin/AdminDiscovery";
+import { AdminCategories } from "./components/admin/AdminCategories";
 import { AdminQueue } from "./components/admin/AdminQueue";
 import { AdminReservations } from "./components/admin/AdminReservations";
 import { MenuProvider } from "./contexts/MenuContext";
@@ -67,6 +68,7 @@ const App = () => (
                   <Route path="menu" element={<AdminMenu />} />
                   <Route path="consumption" element={<AdminConsumption />} />
                   <Route path="discovery" element={<AdminDiscovery />} />
+                  <Route path="categories" element={<AdminCategories />} />
                   <Route path="queue" element={<AdminQueue />} />
                   <Route path="reservations" element={<AdminReservations />} />
                 </Route>

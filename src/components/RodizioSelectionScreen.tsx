@@ -1,5 +1,5 @@
 
-import { Fish, Smile, User, ChevronLeft } from 'lucide-react';
+import { Fish, Smile, User, ChevronLeft, Utensils } from 'lucide-react';
 import { useOrder } from '@/contexts/OrderContext';
 import { additionalCharges } from '@/data/menuData';
 import { useState } from 'react';
@@ -13,11 +13,13 @@ interface HomeScreenProps {
 }
 
 export function RodizioSelectionScreen({ onStartOrder, onBack, hasTable = false }: HomeScreenProps) {
-  const { setSession, session, currentClientId, clearCart, addDirectlyToSentOrders, resetTableOrders, settings } = useOrder();
+  const { setSession, session, currentClientId, clearCart, addDirectlyToSentOrders, resetTableOrders, settings, restaurantType } = useOrder();
   const { t } = useLanguage();
   const [adultsCount, setAdultsCount] = useState(0);
   const [childrenCount, setChildrenCount] = useState(0);
 
+  const isSteakhouse = restaurantType === 'steakhouse';
+  const rodizioLabel = isSteakhouse ? 'Rodízio Adulto' : 'Rodízio Adulto'; // Keeping internal name but can change UI below
   const rodizioPriceAdult = settings?.rodizio_price_adult || 129.99;
   const rodizioPriceChild = settings?.rodizio_price_child || 69.99;
 
@@ -33,7 +35,7 @@ export function RodizioSelectionScreen({ onStartOrder, onBack, hasTable = false 
       tableName: tableName,
       clients: adultsCount + childrenCount,
       turnStartTime: new Date(),
-      roundLimit: 24,
+      roundLimit: restaurantType === 'sushi' ? 24 : 999, // High limit for Steakhouse
       currentRoundItems: 0,
       roundNumber: 1,
     });
@@ -49,11 +51,13 @@ export function RodizioSelectionScreen({ onStartOrder, onBack, hasTable = false 
       const adultItem = {
         id: 'rodizio-adult',
         code: 'SYS01',
-        name: 'Rodízio Adulto',
-        description: 'Buffet livre adulto',
+        name: isSteakhouse ? 'Rodízio de Carnes Adulto' : 'Rodízio Adulto',
+        description: isSteakhouse ? 'Buffet livre de carnes' : 'Buffet livre adulto',
         price: rodizioPriceAdult,
         isRodizio: false,
-        image: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=300&h=200&fit=crop',
+        image: isSteakhouse
+          ? 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&h=200&fit=crop'
+          : 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=300&h=200&fit=crop',
         category: 'system',
         quantity: 1,
         addedBy: currentClientId,
@@ -70,11 +74,13 @@ export function RodizioSelectionScreen({ onStartOrder, onBack, hasTable = false 
       const childItem = {
         id: 'rodizio-child',
         code: 'SYS02',
-        name: 'Rodízio Criança',
-        description: 'Buffet livre infantil',
+        name: isSteakhouse ? 'Rodízio de Carnes Criança' : 'Rodízio Criança',
+        description: isSteakhouse ? 'Buffet livre infantil de carnes' : 'Buffet livre infantil',
         price: rodizioPriceChild,
         isRodizio: false,
-        image: 'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=300&h=200&fit=crop',
+        image: isSteakhouse
+          ? 'https://images.unsplash.com/photo-1544025162-d76694265947?w=300&h=200&fit=crop'
+          : 'https://images.unsplash.com/photo-1559339352-11d035aa65de?w=300&h=200&fit=crop',
         category: 'system',
         quantity: 1,
         addedBy: currentClientId,
@@ -240,7 +246,7 @@ export function RodizioSelectionScreen({ onStartOrder, onBack, hasTable = false 
 
               <div className="flex items-center gap-3 bg-white/20 px-4 py-2 rounded-xl backdrop-blur-md group-hover:bg-white/30 transition-colors">
                 <span className="text-sm uppercase tracking-wider">COMEÇAR</span>
-                <Fish className="w-5 h-5 fill-current" />
+                {isSteakhouse ? <Utensils className="w-5 h-5 fill-current" /> : <Fish className="w-5 h-5 fill-current" />}
               </div>
             </button>
           </div>

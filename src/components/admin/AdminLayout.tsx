@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation, Outlet, useParams } from 'react-router-dom';
-import { LayoutDashboard, UtensilsCrossed, Armchair, LogOut, Menu, Bell, CreditCard, Package, ChefHat, TrendingDown, TrendingUp, Globe, Users, Calendar, Settings, Store } from 'lucide-react';
+import { LayoutDashboard, UtensilsCrossed, Armchair, LogOut, Menu, Bell, CreditCard, Package, ChefHat, TrendingDown, TrendingUp, Globe, Users, Calendar, Settings, Store, LayoutGrid } from 'lucide-react';
 import { BrandingLogo } from '@/components/BrandingLogo';
 import { toast } from 'sonner';
 import { supabase } from '@/lib/supabase';
@@ -151,6 +151,7 @@ export const AdminLayout = () => {
         { label: 'Cozinha', icon: UtensilsCrossed, path: `/${slug}/admin/kitchen` },
         { label: 'Estoque', icon: Package, path: `/${slug}/admin/inventory` },
         { label: 'Ficha Técnica', icon: ChefHat, path: `/${slug}/admin/recipes` },
+        { label: 'Gerir Categorias', icon: LayoutGrid, path: `/${slug}/admin/categories` },
         { label: 'Cardápio', icon: Menu, path: `/${slug}/admin/menu` },
         { label: 'Rel. Consumo', icon: TrendingDown, path: `/${slug}/admin/consumption` },
     ] : [];

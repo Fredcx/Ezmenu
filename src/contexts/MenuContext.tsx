@@ -18,6 +18,9 @@ interface MenuContextType {
     addItem: (item: Omit<MenuItem, 'id'>) => void;
     updateItem: (id: string, updates: Partial<MenuItem>) => void;
     deleteItem: (id: string) => void;
+    addCategory: (category: Omit<Category, 'id' | 'dbId'> & { type: string }) => Promise<void>;
+    updateCategory: (id: string, updates: Partial<Category>) => Promise<void>;
+    deleteCategory: (id: string) => Promise<void>;
     refreshMenu: () => void;
     isLoading: boolean;
 }
@@ -276,6 +279,51 @@ export function MenuProvider({ children }: { children: ReactNode }) {
         }
     };
 
+    const addCategory = async (categoryData: Omit<Category, 'id' | 'dbId'> & { type: string }) => {
+        if (!currentEstablishmentId) return;
+        try {
+            const { error } = await supabase.from('categories').insert({
+                name: categoryData.name,
+                icon: categoryData.icon,
+                type: categoryData.type,
+                establishment_id: currentEstablishmentId
+            });
+            if (error) throw error;
+        } catch (error) {
+            console.error("Error adding category:", error);
+            throw error;
+        }
+    };
+
+    const updateCategory = async (id: string, updates: Partial<Category>) => {
+        try {
+            const { error } = await supabase
+                .from('categories')
+                .update({
+                    name: updates.name,
+                    icon: updates.icon
+                })
+                .eq('id', id);
+            if (error) throw error;
+        } catch (error) {
+            console.error("Error updating category:", error);
+            throw error;
+        }
+    };
+
+    const deleteCategory = async (id: string) => {
+        try {
+            const { error } = await supabase
+                .from('categories')
+                .delete()
+                .eq('id', id);
+            if (error) throw error;
+        } catch (error) {
+            console.error("Error deleting category:", error);
+            throw error;
+        }
+    };
+
     const refreshMenu = () => loadInitial();
 
     return (
@@ -286,6 +334,9 @@ export function MenuProvider({ children }: { children: ReactNode }) {
             addItem,
             updateItem,
             deleteItem,
+            addCategory,
+            updateCategory,
+            deleteCategory,
             refreshMenu,
             isLoading
         }}>

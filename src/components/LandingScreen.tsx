@@ -201,14 +201,34 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
         window.location.search = '';
     };
 
-    const options = [
-        { id: 'rodizio', label: t('rodizio'), icon: Fish, image: 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=80', color: 'border-primary' },
-        { id: 'alacarte', label: t('alacarte'), icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80', color: 'border-secondary' },
-        { id: 'desserts', label: t('desserts'), icon: IceCream, image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=800&q=80', color: 'border-pink-500' },
-        { id: 'drinks', label: t('drinks'), icon: GlassWater, image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=80', color: 'border-blue-400' },
-        { id: 'wines', label: 'CARTA DE VINHOS', icon: Wine, image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80', color: 'border-red-800' },
-        { id: 'cocktails', label: 'DRINKS', icon: Martini, image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&q=80', color: 'border-orange-500' }
-    ] as const;
+    const getOptions = () => {
+        const baseOptions = [
+            { id: 'desserts', label: t('desserts'), icon: IceCream, image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=800&q=80', color: 'border-pink-500' },
+            { id: 'drinks', label: t('drinks'), icon: GlassWater, image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=80', color: 'border-blue-400' },
+            { id: 'wines', label: 'CARTA DE VINHOS', icon: Wine, image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80', color: 'border-red-800' },
+            { id: 'cocktails', label: 'DRINKS', icon: Martini, image: 'https://images.unsplash.com/photo-1551024709-8f23befc6f87?w=800&q=80', color: 'border-orange-500' }
+        ];
+
+        if (establishment?.restaurant_type === 'general') {
+            return [
+                { id: 'alacarte', label: 'CARDÁPIO COMPLETO', icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80', color: 'border-secondary' },
+                ...baseOptions
+            ];
+        }
+
+        const rodizioLabel = establishment?.restaurant_type === 'steakhouse' ? 'RODÍZIO DE CARNES' : t('rodizio');
+        const rodizioImage = establishment?.restaurant_type === 'steakhouse'
+            ? 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80'
+            : 'https://images.unsplash.com/photo-1579871494447-9811cf80d66c?w=800&q=80';
+
+        return [
+            { id: 'rodizio', label: rodizioLabel, icon: Fish, image: rodizioImage, color: 'border-primary' },
+            { id: 'alacarte', label: t('alacarte'), icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80', color: 'border-secondary' },
+            ...baseOptions
+        ];
+    };
+
+    const options = getOptions();
 
     return (
         <div className="h-full overflow-y-auto bg-background text-foreground relative no-scrollbar">
@@ -295,7 +315,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                         {options.map((option, idx) => (
                             <button
                                 key={option.id}
-                                onClick={() => onSelectOption(option.id)}
+                                onClick={() => onSelectOption(option.id as any)}
                                 className="group relative overflow-hidden rounded-[2.5rem] bg-card shadow-premium border border-border/30 transition-premium hover:shadow-premium-hover hover:-translate-y-1 active:scale-95 aspect-[3/4] w-full outline-none isolation-isolate transform-gpu will-change-transform"
                                 style={{
                                     animationDelay: `${idx * 150}ms`,
