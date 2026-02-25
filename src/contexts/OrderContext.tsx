@@ -20,7 +20,7 @@ export interface MenuItem {
 export interface OrderItem extends MenuItem {
   quantity: number;
   addedBy: string; // Client identifier
-  status: 'pending' | 'sent' | 'preparing' | 'ready' | 'completed';
+  status: 'pending' | 'sent' | 'preparing' | 'ready' | 'completed' | 'paid';
   observation?: string;
 }
 
@@ -229,6 +229,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           const menuItem = item.menu_items;
           let finalStatus: OrderItem['status'] = item.status;
           if (order.status === 'completed') finalStatus = 'completed';
+          else if (order.status === 'paid') finalStatus = 'paid';
           else if (item.status === 'ready') finalStatus = 'completed';
 
           flattenedItems.push({

@@ -27,7 +27,7 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
 
     const allPaid = useMemo(() => {
         if (sentOrders.length === 0) return false;
-        return sentOrders.every(order => order.status === 'completed');
+        return sentOrders.every(order => order.status === 'completed' || order.status === 'paid');
     }, [sentOrders]);
 
     useEffect(() => {
