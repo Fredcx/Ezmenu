@@ -308,7 +308,8 @@ export function DiscoveryScreen() {
                                                     setUserProfile(null);
                                                     setIsProfileOpen(false);
                                                     toast.success("Sessão encerrada");
-                                                    navigate('/');
+                                                    // Force full refresh to clear all states across the app
+                                                    window.location.href = '/';
                                                 }}
                                                 className="w-full flex items-center gap-3 px-4 py-3 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded-xl transition-colors text-xs font-bold"
                                             >

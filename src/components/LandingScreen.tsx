@@ -310,8 +310,8 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                     )}
                 </div>
 
-                <div className="px-6 pb-20 flex-1">
-                    <div className="grid grid-cols-2 gap-6 m-auto max-w-lg">
+                <div className="px-6 flex-1">
+                    <div className="grid grid-cols-2 gap-6 m-auto max-w-lg mb-20">
                         {options.map((option, idx) => (
                             <button
                                 key={option.id}
@@ -343,11 +343,11 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                             </button>
                         ))}
                     </div>
-                </div>
 
-                {/* Footer Branding */}
-                <div className="py-8 pb-12 flex flex-col items-center justify-center opacity-30 select-none grayscale cursor-default hover:grayscale-0 hover:opacity-100 transition-all duration-700 mt-auto">
-                    <BrandingLogo variant="dark" className="w-12 h-12" showText={true} />
+                    {/* Footer Branding - Moved INSIDE the scrollable content flow with padding */}
+                    <div className="py-20 flex flex-col items-center justify-center opacity-40 select-none pb-40">
+                        <BrandingLogo variant="dark" className="w-12 h-12" showText={true} />
+                    </div>
                 </div>
             </div>
         </div>

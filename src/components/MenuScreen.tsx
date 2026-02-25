@@ -14,12 +14,13 @@ interface MenuScreenProps {
   initialCategory?: string;
   initialMenu?: string;
   onNavigateToRodizio?: () => void;
+  onBackToLanding?: () => void;
   hasTable?: boolean;
 }
 
-export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateToRodizio, hasTable = false }: MenuScreenProps) {
+export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateToRodizio, onBackToLanding, hasTable = false }: MenuScreenProps) {
   const [selectedMenu, setSelectedMenu] = useState(initialMenu);
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || 'sashimi');
+  const [selectedCategory, setSelectedCategory] = useState(initialCategory || (hasTable ? 'sashimi' : 'entradas'));
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
@@ -28,13 +29,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
   const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
   const { items: menuItems, categories: rodizioCategories, alacarteCategories } = useMenu();
 
-  // Update category when menu type changes
-  useMemo(() => {
-    if (selectedMenu === 'desserts') setSelectedCategory('sobremesas');
-    else if (selectedMenu === 'drinks') setSelectedCategory('bebidas'); // Or 'drinks'
-    else if (selectedMenu === 'wines') setSelectedCategory('vinhos');
-    else if (selectedMenu === 'cocktails') setSelectedCategory('drinks');
-  }, [selectedMenu]);
+  // REMOVED Redundant synchronizer that was overriding initialCategory logic
 
   const handleMenuChange = (menuId: string) => {
     // If switching to rodizio, trigger navigation
@@ -114,6 +109,8 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
         onMenuChange={handleMenuChange}
         onFilterClick={() => setShowFilter(true)}
         onSearchClick={() => { }}
+        onBack={onBackToLanding}
+        hasTable={hasTable}
       />
 
       {/* Main Content */}
@@ -144,7 +141,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
           <RecentOrdersSection />
 
           {/* Products List - Horizontal Cards Layout */}
-          <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-48">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 pb-32">
             {filteredItems.map((item) => (
               <ProductCard
                 key={item.id}

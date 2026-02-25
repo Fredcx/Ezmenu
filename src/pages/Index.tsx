@@ -97,12 +97,16 @@ function AppContent() {
 
   const handleStartOrder = () => {
     setHasStarted(true);
-    setInitialMenu('menu');
+    setInitialMenu(hasTable ? 'menu' : 'alacarte');
     setActiveTab('menu');
   };
 
   const handleTabChange = (tab: TabId) => {
     if (tab === 'home') {
+      if (activeTab === 'home' && !hasTable) {
+        window.location.href = '/';
+        return;
+      }
       setHomeView('landing');
       setActiveTab('home');
     } else {
@@ -140,7 +144,18 @@ function AppContent() {
         setMenuCategory('drinks');
         setActiveTab('menu');
         break;
+      case 'drinks':
+        setInitialMenu('drinks');
+        setMenuCategory('bebidas');
+        setActiveTab('menu');
+        break;
     }
+  };
+
+  const handleBackToLanding = () => {
+    setHomeView('landing');
+    setActiveTab('home');
+    setMenuCategory(undefined);
   };
 
   return (
@@ -159,10 +174,11 @@ function AppContent() {
         )}
         {activeTab === 'menu' && (
           <MenuScreen
-            key={menuCategory}
+            key={`${menuCategory}-${initialMenu}`}
             initialCategory={menuCategory}
             initialMenu={initialMenu}
             onNavigateToRodizio={() => handleLandingOption('rodizio')}
+            onBackToLanding={handleBackToLanding}
             hasTable={hasTable}
           />
         )}
