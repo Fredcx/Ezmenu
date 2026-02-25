@@ -20,7 +20,7 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
     const [email, setEmail] = useState('');
     const [cpf, setCpf] = useState('');
     const [isLoadingPix, setIsLoadingPix] = useState(false);
-    const [pixData, setPixData] = useState<{ text: string, url: string, expiration: string } | null>(null);
+    const [pixData, setPixData] = useState<{ encodedImage: string, copyPaste: string, expiration: string } | null>(null);
 
     // Merge cart (un-sent) and sentOrders to show full bill simulation
     const allItems = useMemo(() => [...sentOrders, ...cart], [sentOrders, cart]);
@@ -48,34 +48,35 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
             const userName = localStorage.getItem('ez_menu_user_name') || 'Cliente';
             const userPhone = localStorage.getItem('ez_menu_user_phone') || '11999999999';
 
-            // Invoke Edge Function
-            const { data, error } = await supabase.functions.invoke('process-payment', {
-                body: {
+            // Chamar API no Vercel
+            const response = await fetch('/api/asaas-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
                     order_id: `TABLE-${localStorage.getItem('ez_menu_table_name') || 'MESA'}-${Date.now()}`,
                     amount: total,
-                    payment_method: 'pix',
                     customer: {
                         name: userName,
                         phone: userPhone,
                         email: email,
-                        document: cpf.replace(/\D/g, '')
+                        cpfCnpj: cpf.replace(/\D/g, '')
                     }
-                }
+                })
             });
 
-            if (error) throw error;
-            if (data.error) throw new Error(typeof data.error === 'string' ? data.error : JSON.stringify(data.error));
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Erro ao processar pagamento');
 
             setPixData({
-                text: data.pix_qr_code,
-                url: data.pix_qr_code_url,
-                expiration: data.pix_expiration_date
+                encodedImage: `data:image/png;base64,${data.pix_qr_code}`,
+                copyPaste: data.pix_copy_paste,
+                expiration: "" // Asaas doesn't return this in the qrCode endpoint easily
             });
             setPaymentStep('pix_qr');
             toast.success("Pix gerado com sucesso!");
         } catch (error: any) {
             console.error("Erro ao gerar Pix:", error);
-            toast.error("Erro ao gerar Pix. Verifique se o CPF é válido.");
+            toast.error("Erro ao gerar Pix. Verifique os dados.");
         } finally {
             setIsLoadingPix(false);
         }
@@ -386,7 +387,7 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
                                             ) : (
                                                 <>
                                                     <div className="bg-white p-4 rounded-[2rem] shadow-xl border border-emerald-100 ring-8 ring-emerald-50">
-                                                        <img src={pixData.url} alt="QR Code Pix" className="w-48 h-48" />
+                                                        <img src={pixData.encodedImage} alt="QR Code Pix" className="w-48 h-48" />
                                                     </div>
 
                                                     <div className="w-full space-y-3">
@@ -395,12 +396,12 @@ export function PaymentScreen({ onBack, total }: PaymentScreenProps) {
                                                         </div>
                                                         <button
                                                             onClick={() => {
-                                                                navigator.clipboard.writeText(pixData.text);
+                                                                navigator.clipboard.writeText(pixData.copyPaste);
                                                                 toast.success("Código copiado!");
                                                             }}
                                                             className="w-full bg-emerald-50 text-emerald-700 border border-emerald-200 rounded-2xl p-4 flex items-center justify-between group hover:bg-emerald-100 transition-colors"
                                                         >
-                                                            <span className="text-xs font-mono truncate mr-4">{pixData.text}</span>
+                                                            <span className="text-xs font-mono truncate mr-4">{pixData.copyPaste}</span>
                                                             <Copy className="w-4 h-4 shrink-0" />
                                                         </button>
 
