@@ -1,7 +1,10 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
+import { createClient } from '@supabase/supabase-js';
 
 const ASAAS_API_URL = "https://api.asaas.com/v3";
 const ASAAS_API_KEY = process.env.ASAAS_API_KEY;
+const SUPABASE_URL = process.env.VITE_SUPABASE_URL;
+const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
     // CORS Headers
@@ -80,6 +83,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
             headers: { "access_token": ASAAS_API_KEY }
         });
         const pixData = await pixQrResponse.json();
+
+        // 4. Record in local database
+        if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+            const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+            await supabase.from("payments").insert({
+                order_id: order_id.includes('TABLE-') ? null : order_id, // Safety check if it's a dummy ID
+                asaas_id: paymentData.id,
+                status: paymentData.status,
+                amount: paymentData.value,
+                pix_qr_code: pixData.encodedImage,
+                pix_copy_paste: pixData.payload
+            });
+        }
 
         return res.status(200).json({
             payment_id: paymentData.id,
