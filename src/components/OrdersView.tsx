@@ -1,19 +1,21 @@
 import React from 'react';
 import { ArrowLeft, ChefHat, Check, Fish, Utensils } from 'lucide-react';
 import { useOrder } from '@/contexts/OrderContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 
 interface OrdersViewProps {
   onBack: () => void;
 }
 
 export function OrdersView({ onBack }: OrdersViewProps) {
+  const { t } = useLanguage();
   const { sentOrders } = useOrder();
 
   return (
     <div className="flex flex-col h-full bg-background relative overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-center p-4 bg-card/80 backdrop-blur-md sticky top-0 z-20 border-b border-border/50">
-        <span className="font-bold text-lg tracking-tight">Meus Pedidos</span>
+        <span className="font-bold text-lg tracking-tight">{t('myOrders')}</span>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6 pb-32">
@@ -24,8 +26,8 @@ export function OrdersView({ onBack }: OrdersViewProps) {
         ) : (
           <div className="flex flex-col items-center justify-center py-32 text-muted-foreground">
             <Check className="w-16 h-16 mb-4 opacity-10" />
-            <p className="font-medium text-lg">Nenhum pedido enviado</p>
-            <p className="text-sm opacity-60 text-center max-w-[250px] mt-2">Os itens que você pedir irão aparecer aqui como pendentes ou enviados.</p>
+            <p className="font-medium text-lg">{t('noOrdersSent')}</p>
+            <p className="text-sm opacity-60 text-center max-w-[250px] mt-2">{t('noOrdersSentDesc')}</p>
           </div>
         )}
       </div>
@@ -37,6 +39,7 @@ export function OrdersView({ onBack }: OrdersViewProps) {
 // SUB-COMPONENT: Sent Orders Tabs (Elite Style)
 // ----------------------------------------------------------------------
 const SentOrdersTabs = ({ items }: { items: any[] }) => {
+  const { t } = useLanguage();
   const [activeTab, setActiveTab] = React.useState<'pending' | 'delivered'>('pending');
   // Filter out rodizio covers and system items for list display
   const visibleItems = items.filter(i => !i.id.startsWith('rodizio-') && i.category !== 'system');
@@ -58,7 +61,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
             <ChefHat className={`w-4 h-4 ${activeTab === 'pending' ? 'animate-bounce-slow' : ''}`} />
             {pendingItems.length > 0 && <span className="absolute -top-1.5 -right-1.5 w-2.5 h-2.5 bg-destructive rounded-full animate-pulse border border-white" />}
           </div>
-          PEDIDOS PENDENTES
+          {t('pendingOrders')}
         </button>
         <button
           onClick={() => setActiveTab('delivered')}
@@ -68,7 +71,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
             }`}
         >
           <Check className="w-4 h-4" />
-          PEDIDOS ENVIADOS
+          {t('sentOrders')}
         </button>
       </div>
 
@@ -96,7 +99,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
 
                     <div className="flex items-center gap-1.5 mt-2 text-xs font-medium text-red-500/80 uppercase tracking-wide">
                       <div className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                      Em preparo na cozinha...
+                      {t('preparingInKitchen')}
                     </div>
 
                     {item.observation && (
@@ -140,7 +143,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 px-1 text-emerald-600">
                     <Fish className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Itens do Rodízio</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{t('rodizioItems')}</span>
                   </div>
                   {deliveredItems.filter(i => i.isRodizio || i.price === 0).map((item, index) => (
                     <div
@@ -160,7 +163,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
                       </div>
                       <div className="flex items-center justify-between pl-11">
                         <span className="text-[10px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
-                          ✓ Entregue (R$ 0,00)
+                          ✓ {t('delivered')} (R$ 0,00)
                         </span>
                       </div>
                     </div>
@@ -173,7 +176,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
                 <div className="space-y-3">
                   <div className="flex items-center gap-2 px-1 text-primary">
                     <Utensils className="w-3.5 h-3.5" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Bebidas & À La Carte</span>
+                    <span className="text-[10px] font-black uppercase tracking-widest">{t('drinksAndAlacarte')}</span>
                   </div>
                   {deliveredItems.filter(i => !i.isRodizio && i.price > 0).map((item, index) => (
                     <div
@@ -204,7 +207,7 @@ const SentOrdersTabs = ({ items }: { items: any[] }) => {
           ) : (
             <div className="flex flex-col items-center justify-center py-12 text-muted-foreground/60">
               <Check className="w-12 h-12 mb-3 opacity-20" />
-              <p>Nenhum pedido entregue ainda.</p>
+              <p>{t('noOrdersDelivered')}</p>
             </div>
           )
         )}

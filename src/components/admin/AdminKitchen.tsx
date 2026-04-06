@@ -25,6 +25,18 @@ export function AdminKitchen() {
     const [activeTab, setActiveTab] = useState("all");
     const [prevServiceCount, setPrevServiceCount] = useState(0);
     const [prevOrderCount, setPrevOrderCount] = useState(0);
+    const [userRole, setUserRole] = useState<string | null>(null);
+
+    useEffect(() => {
+        const checkRole = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                const { data: prof } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                setUserRole(prof?.role || 'customer');
+            }
+        };
+        checkRole();
+    }, []);
 
     const fetchOrders = async () => {
         try {

@@ -20,9 +20,9 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false, var
   const allTabs = [
     { id: 'home' as TabId, icon: Home, label: t('home') },
     { id: 'menu' as TabId, icon: UtensilsCrossed, label: t('menu') },
-    { id: 'cart' as TabId, icon: ShoppingCart, label: t('cart'), shortLabel: 'PEDIDOS' },
-    { id: 'service' as TabId, icon: Bell, label: t('callService'), shortLabel: 'SERVIÇO' },
-    { id: 'account' as TabId, icon: Receipt, label: 'CONTA' },
+    { id: 'cart' as TabId, icon: ShoppingCart, label: t('cart'), shortLabel: t('orders') },
+    { id: 'service' as TabId, icon: Bell, label: t('callService'), shortLabel: t('call') },
+    { id: 'account' as TabId, icon: Receipt, label: t('account') },
   ];
 
   // If Guest (no table), show only Home
@@ -66,7 +66,7 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false, var
           className={`relative flex flex-col items-center justify-center gap-1 transition-all ${isFloating ? 'p-2 w-16' : ''} ${activeTab === 'service' ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground'}`}
         >
           <Bell className={isFloating ? "w-6 h-6" : "w-5 h-5"} strokeWidth={activeTab === 'service' ? 2.5 : 2} />
-          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">Chamar</span>
+          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">{t('call')}</span>
           {activeTab === 'service' && (
             <span className="absolute -bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full animate-in zoom-in" />
           )}
@@ -77,7 +77,7 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false, var
           className={`relative flex flex-col items-center justify-center gap-1 transition-all ${isFloating ? 'p-2 w-16' : ''} ${activeTab === 'orders' ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground'}`}
         >
           <ClipboardList className={isFloating ? "w-6 h-6" : "w-5 h-5"} strokeWidth={activeTab === 'orders' ? 2.5 : 2} />
-          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">Pedidos</span>
+          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">{t('orders')}</span>
           {activeTab === 'orders' && (
             <span className="absolute -bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full animate-in zoom-in" />
           )}
@@ -88,7 +88,7 @@ export function BottomNavigation({ activeTab, onTabChange, hasTable = false, var
           className={`relative flex flex-col items-center justify-center gap-1 transition-all ${isFloating ? 'p-2 w-16' : ''} ${activeTab === 'account' ? 'text-primary scale-105' : 'text-muted-foreground hover:text-foreground'}`}
         >
           <Receipt className={isFloating ? "w-6 h-6" : "w-5 h-5"} strokeWidth={activeTab === 'account' ? 2.5 : 2} />
-          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">Conta</span>
+          <span className="text-[9px] font-bold tracking-wider uppercase leading-none">{t('account')}</span>
           {activeTab === 'account' && (
             <span className="absolute -bottom-0 left-1/2 -translate-x-1/2 w-1 h-1 bg-primary rounded-full animate-in zoom-in" />
           )}

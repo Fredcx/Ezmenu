@@ -44,12 +44,12 @@ export function LandingScreenV2({ onSelectOption, hasTable = false }: LandingScr
         }
 
         return [
-            { id: 'rodizio', label: 'RODÍZIO', icon: Fish, image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80' },
-            { id: 'alacarte', label: 'À LA CARTE', icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80' },
-            { id: 'drinks', label: 'BEBIDAS', icon: GlassWater, image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=80' },
-            { id: 'wines', label: 'VINHOS', icon: Wine, image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80' },
-            { id: 'cocktails', label: 'DRINKS', icon: Martini, image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=800&q=80' },
-            { id: 'desserts', label: 'DOCES', icon: IceCream, image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=800&q=80' }
+            { id: 'rodizio', label: t('rodizio'), icon: Fish, image: 'https://images.unsplash.com/photo-1544025162-d76694265947?w=800&q=80' },
+            { id: 'alacarte', label: t('alacarte'), icon: Utensils, image: 'https://images.unsplash.com/photo-1611143669185-af224c5e3252?w=800&q=80' },
+            { id: 'drinks', label: t('drinks'), icon: GlassWater, image: 'https://images.unsplash.com/photo-1544145945-f90425340c7e?w=800&q=80' },
+            { id: 'wines', label: t('wines'), icon: Wine, image: 'https://images.unsplash.com/photo-1510812431401-41d2bd2722f3?w=800&q=80' },
+            { id: 'cocktails', label: t('cocktails'), icon: Martini, image: 'https://images.unsplash.com/photo-1514362545857-3bc16c4c7d1b?w=800&q=80' },
+            { id: 'desserts', label: t('desserts'), icon: IceCream, image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=800&q=80' }
         ];
     };
 
@@ -68,7 +68,7 @@ export function LandingScreenV2({ onSelectOption, hasTable = false }: LandingScr
                         }} 
                         className="flex items-center gap-2 bg-black/5 dark:bg-white/10 backdrop-blur-md px-3 py-1.5 rounded-full text-[10px] font-bold text-foreground border border-black/10 dark:border-white/20 uppercase tracking-widest shadow-sm transition-all hover:scale-105 active:scale-95"
                     >
-                        <UserPlus className="w-3.5 h-3.5" /> Conta
+                        <UserPlus className="w-3.5 h-3.5" /> {t('account')}
                     </button>
                 </div>
             )}
@@ -102,10 +102,10 @@ export function LandingScreenV2({ onSelectOption, hasTable = false }: LandingScr
                     
                     <div className="flex flex-col items-center justify-center space-y-1 w-full px-2">
                         <span className="text-2xl sm:text-3xl font-black text-foreground uppercase tracking-tight block font-sans">
-                            OLÁ, {(localStorage.getItem('ez_menu_client_name') || 'Visitante').split(' ')[0]}
+                            {t('welcomeUser').replace('{name}', (localStorage.getItem('ez_menu_client_name') || 'Visitante').split(' ')[0])}
                         </span>
                         <h2 className="text-[12px] sm:text-[14px] font-bold text-muted-foreground tracking-[0.2em] uppercase font-sans mt-2">
-                            FAÇA SEU PEDIDO
+                            {t('placeOrder')}
                         </h2>
                     </div>
                 </div>
@@ -133,8 +133,8 @@ export function LandingScreenV2({ onSelectOption, hasTable = false }: LandingScr
                             
                             <span className="text-lg font-black tracking-tight uppercase italic flex items-center gap-2">
                                 {tableStatus === 'occupied' 
-                                    ? (isTableOccupiedByMe ? 'Mesa Ocupada' : 'Entrar na Mesa') 
-                                    : 'Ocupar Mesa'}
+                                    ? (isTableOccupiedByMe ? t('mesaOcupada') : t('entrarNaMesa')) 
+                                    : t('occupyTable')}
                                 
                                 {tableStatus === 'occupied' && isTableOccupiedByMe && (
                                     <span className="relative flex h-2.5 w-2.5 ml-1">
@@ -149,21 +149,18 @@ export function LandingScreenV2({ onSelectOption, hasTable = false }: LandingScr
                             )}
                         </button>
                         
-                        {tableStatus === 'free' && !isOccupying && (
-                            <div className="flex justify-center mt-2 opacity-60 w-full px-4">
-                                <p className="text-[10px] text-muted-foreground font-semibold tracking-widest text-center uppercase leading-relaxed max-w-[260px]">
-                                    <Info className="w-3.5 h-3.5 inline-block mr-1.5 align-middle relative -top-[1.5px]" />
-                                    Clique em "Ocupar Mesa" para iniciar seus pedidos
-                                </p>
-                            </div>
-                        )}
+                        <div className="flex items-center gap-3 text-muted-foreground/40 mt-3 animate-in fade-in duration-1000 delay-500">
+                             <div className="h-[1px] w-4 bg-current" />
+                             <p className="text-[9px] font-black uppercase tracking-widest text-center max-w-[200px] leading-tight">
+                                {t('clickToStart')}
+                             </p>
+                             <div className="h-[1px] w-4 bg-current" />
+                        </div>
                     </div>
                 )}
-            </div>
 
-            {/* Symmetrical 3-Column Grid */}
-            <div className="px-5 max-w-5xl mx-auto">
-                <div className="grid grid-cols-3 gap-2">
+                {/* Categories Grid - Constrained for elegance */}
+                <div className="grid grid-cols-2 md:grid-cols-3 gap-3 w-full max-w-2xl mx-auto pb-32 animate-in fade-in zoom-in-95 duration-1000 delay-300">
                     {options.map((option) => (
                         <button
                             key={option.id}

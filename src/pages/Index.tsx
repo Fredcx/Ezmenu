@@ -88,6 +88,8 @@ function AppContent() {
       if (e.detail === 'rodizio') {
         setHomeView('rodizio');
         setActiveTab('home');
+      } else if (e.detail === 'orders') {
+        setActiveTab('orders');
       }
     };
     window.addEventListener('ez-menu-nav', handleNav);
@@ -196,8 +198,8 @@ function AppContent() {
   };
 
   return (
-    <div className="w-full min-h-[100dvh] flex justify-center bg-background sm:bg-black">
-      <div className="w-full h-[100dvh] sm:max-w-[480px] bg-background flex flex-col relative sm:shadow-2xl overflow-hidden">
+    <div className="w-full min-h-[100dvh] flex justify-center bg-background">
+      <div className="w-full min-h-[100dvh] bg-background flex flex-col relative overflow-hidden">
       <div className="flex-1 overflow-hidden relative flex flex-col">
         {activeTab === 'home' && (
           homeView === 'landing' ? (

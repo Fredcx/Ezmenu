@@ -44,6 +44,12 @@ export const AdminLayout = () => {
                     return;
                 }
             } else if (slug) {
+                // Waiters should be redirected to the staff portal
+                if (role === 'waiter') {
+                    navigate(`/${slug}/equipe`);
+                    return;
+                }
+
                 // If on a restaurant path, check if user has access to THIS restaurant
                 const { data: est } = await supabase
                     .from('establishments')
@@ -153,6 +159,7 @@ export const AdminLayout = () => {
         { label: 'Ficha Técnica', icon: ChefHat, path: `/${slug}/admin/recipes` },
         { label: 'Gerir Categorias', icon: LayoutGrid, path: `/${slug}/admin/categories` },
         { label: 'Cardápio', icon: Menu, path: `/${slug}/admin/menu` },
+        { label: 'Equipe', icon: Users, path: `/${slug}/admin/staff` },
         { label: 'Previsualização', icon: Eye, path: `/${slug}/admin/preview` },
         { label: 'Histórico', icon: ShoppingBag, path: `/${slug}/admin/history` },
         { label: 'Rel. Consumo', icon: TrendingDown, path: `/${slug}/admin/consumption` },

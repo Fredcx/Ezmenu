@@ -51,11 +51,23 @@ export function AdminTables() {
     const [activeTab, setActiveTab] = useState<'info' | 'orders'>('info');
     const [currentTime, setCurrentTime] = useState(Date.now());
     const [showQrModal, setShowQrModal] = useState(false);
+    const [userRole, setUserRole] = useState<string | null>(null);
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(Date.now()), 1000); // 1s for "live" timer
         return () => clearInterval(interval);
     }, []);
+
+    useEffect(() => {
+        const checkRole = async () => {
+            const { data: { session } } = await supabase.auth.getSession();
+            if (session) {
+                const { data: prof } = await supabase.from('profiles').select('role').eq('id', session.user.id).single();
+                setUserRole(prof?.role || 'customer');
+            }
+        };
+        checkRole();
+    }, []);;
 
     // Editing Specifics
     const mapRef = useRef<HTMLDivElement>(null);
@@ -566,12 +578,14 @@ export function AdminTables() {
                                     <ZoomIn className="h-4 w-4" />
                                 </Button>
                             </div>
-                            <Button
-                                onClick={() => setIsEditing(true)}
-                                className="gap-2 px-5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
-                            >
-                                <Edit className="w-4 h-4" /> Editar Planta
-                            </Button>
+                            {(userRole === 'admin' || userRole === 'super_admin') && (
+                                <Button
+                                    onClick={() => setIsEditing(true)}
+                                    className="gap-2 px-5 rounded-xl shadow-lg shadow-primary/20 hover:shadow-primary/30 transition-all hover:-translate-y-0.5"
+                                >
+                                    <Edit className="w-4 h-4" /> Editar Planta
+                                </Button>
+                            )}
                         </>
                     ) : (
                         <div className="flex items-center gap-2 bg-card p-1.5 rounded-xl border border-border/60 shadow-lg animate-in slide-in-from-right-4">

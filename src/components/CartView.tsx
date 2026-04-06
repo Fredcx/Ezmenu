@@ -1,6 +1,7 @@
 import { ArrowLeft, Trash2, Send, ChefHat, ShoppingCart as CartIcon, Minus, Plus, Check, AlertCircle, Fish, Pencil, Utensils } from 'lucide-react';
 import { useInventory } from '@/contexts/InventoryContext';
 import { useOrder } from '@/contexts/OrderContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { toast } from 'sonner';
 import React, { useMemo, useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
@@ -13,8 +14,7 @@ interface CartViewProps {
 }
 
 export function CartView({ onBack, onPayment }: CartViewProps) {
-  const { deductStockForOrder } = useInventory(); // Consume inventory context
-
+  const { t } = useLanguage();
   const [isNoteOpen, setIsNoteOpen] = useState(false);
   const [note, setNote] = useState('');
   const [activeItemId, setActiveItemId] = useState<{id: string, addedBy: string} | null>(null);
@@ -63,9 +63,11 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
 
   const tableTotal = rodizioTotal + alacarteSentTotal + cartTotal;
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (cart.length > 0) {
-      sendOrder();
+      await sendOrder();
+      // Redirect to orders tab
+      window.dispatchEvent(new CustomEvent('ez-menu-nav', { detail: 'orders' }));
     }
   };
 
@@ -76,7 +78,7 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
         <button onClick={onBack} className="p-2 -ml-2 hover:bg-secondary rounded-full transition-colors">
           <ArrowLeft className="w-6 h-6" />
         </button>
-        <span className="font-bold text-lg tracking-tight">Mesa {tableName}</span>
+        <span className="font-bold text-lg tracking-tight">{t('table')} {tableName}</span>
         <div className="w-10" />
       </div>
 
@@ -89,8 +91,8 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
             <div className="w-24 h-24 rounded-full bg-secondary/50 flex items-center justify-center mb-6">
               <CartIcon className="w-10 h-10 opacity-30" />
             </div>
-            <p className="text-xl font-medium text-foreground">Seu carrinho está vazio</p>
-            <p className="text-sm mt-2 max-w-xs text-center leading-relaxed">Navegue pelo menu e adicione pratos deliciosos para começar.</p>
+            <p className="text-xl font-medium text-foreground">{t('cartEmpty')}</p>
+            <p className="text-sm mt-2 max-w-xs text-center leading-relaxed">{t('cartEmptyDesc')}</p>
           </div>
         )}
 
@@ -104,7 +106,7 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                     <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
                     <span className="relative inline-flex rounded-full h-3 w-3 bg-primary"></span>
                   </span>
-                  <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">Novo Pedido</h2>
+                  <h2 className="text-sm font-bold text-foreground uppercase tracking-wider">{t('newOrder')}</h2>
                 </div>
 
                 {clientItems.map((item) => (
@@ -161,7 +163,7 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                         {(item.isRodizio && hasActiveRodizio) ? (
                           <span className="text-emerald-600 flex items-center gap-1">
                             <ChefHat className="w-3 h-3" />
-                            Incluso no Rodízio
+                            {t('includedInRodizio')}
                           </span>
                         ) : `R$ ${(item.price * item.quantity).toFixed(2)}`}
                       </div>
@@ -194,7 +196,7 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
 
             {otherClientItems.length > 0 && (
               <div className="opacity-75 grayscale-[30%] scale-95 origin-top">
-                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 pl-1">Outros Dispositivos</div>
+                <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3 pl-1">{t('rodizio').includes('Rodízio') ? 'Outros Dispositivos' : 'Other Devices'}</div>
                 {otherClientItems.map((item) => (
                   <div key={`${item.id}-${item.addedBy}`} className="flex items-center justify-between p-3 bg-muted/30 rounded-xl mb-2 border border-border/50">
                     <div className="flex items-center gap-3">
@@ -224,12 +226,15 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                 <div className="flex justify-between text-xs font-medium text-emerald-600">
                   <span className="flex items-center gap-1">
                     <Fish className="w-3 h-3" />
-                    Rodízio ({rodizioCovers.length} {rodizioCovers.length === 1 ? 'pessoa' : 'pessoas'})
+                    {rodizioCovers.length === 1 
+                      ? t('rodizioPerson').replace('{count}', rodizioCovers.length.toString())
+                      : t('rodizioPeople').replace('{count}', rodizioCovers.length.toString())
+                    }
                     <button
                       onClick={() => window.dispatchEvent(new CustomEvent('ez-menu-nav', { detail: 'rodizio' }))}
                       className="ml-2 text-[10px] font-black uppercase tracking-wider underline opacity-40 hover:opacity-100 hover:text-primary transition-all decoration-2 underline-offset-2 flex items-center gap-1"
                     >
-                      Alterar
+                      {t('back').includes('Voltar') ? 'Alterar' : 'Change'}
                     </button>
                   </span>
                   <span>R$ {rodizioTotal.toFixed(2)}</span>
@@ -239,7 +244,7 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
                 <div className="flex justify-between text-xs font-medium text-primary">
                   <span className="flex items-center gap-1">
                     <Utensils className="w-3 h-3" />
-                    Itens da Conta (A La Carte)
+                    {t('drinksAndAlacarte')}
                   </span>
                   <span>R$ {alacarteSentTotal.toFixed(2)}</span>
                 </div>
@@ -252,33 +257,33 @@ export function CartView({ onBack, onPayment }: CartViewProps) {
             {cart.length > 0 ? (
               <>
                 <div className="flex flex-col">
-                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">Total Acumulado</span>
+                  <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{t('rodizio').includes('Rodízio') ? 'Total Acumulado' : 'Subtotal'}</span>
                   <span className="text-2xl font-bold text-primary">R$ {cartTotal.toFixed(2)}</span>
                 </div>
                 <button
                   onClick={handleSend}
                   className="flex-1 max-w-[200px] h-14 bg-primary text-primary-foreground text-lg font-bold rounded-2xl shadow-lg shadow-primary/25 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                 >
-                  <span>Pedir</span>
+                  <span>{t('order')}</span>
                   <CartIcon className="w-5 h-5 fill-current opacity-50" />
                 </button>
               </>
             ) : (
               <div className="w-full flex justify-between items-center gap-3">
                 <div className="shrink-0 flex flex-col">
-                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Total da Mesa</span>
+                  <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">{t('totalMesa')}</span>
                   <div className="text-2xl font-black text-foreground tracking-tight">R$ {tableTotal.toFixed(2)}</div>
                 </div>
                 <div className="flex items-center gap-2">
                   <button onClick={onBack} className="px-4 py-3 rounded-xl bg-secondary/80 hover:bg-secondary font-semibold text-xs transition-colors">
-                    Voltar
+                    {t('back')}
                   </button>
                   <button
                     onClick={onPayment}
                     className="group relative px-6 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white font-bold text-sm shadow-xl shadow-red-600/20 hover:shadow-red-600/40 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2 overflow-hidden"
                   >
                     <span className="relative z-10 flex items-center gap-3">
-                      <span>FECHAR CONTA</span>
+                      <span>{t('closeBill')}</span>
                       <div className="w-6 h-6 rounded-full bg-white/20 flex items-center justify-center">
                         <Check className="w-3.5 h-3.5" />
                       </div>

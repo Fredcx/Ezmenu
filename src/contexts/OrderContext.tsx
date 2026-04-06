@@ -217,14 +217,28 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       const userEmail = localStorage.getItem('ez_menu_client_email') || '';
       const userName = localStorage.getItem('ez_menu_client_name') || 'Cliente';
 
-      const { data: latestTable } = await supabase
+      // Try to select seated_at, if it fails, retry without it
+      const { data: latestTable, error: selectError } = await supabase
         .from('restaurant_tables')
-        .select('occupants, status')
+        .select('occupants, status, seated_at')
         .eq('id', tableName)
         .eq('establishment_id', establishmentId)
         .single();
 
-      const existingOccupants = latestTable?.occupants || [];
+      let tableData: any = latestTable;
+      
+      if (selectError && selectError.message.includes('seated_at')) {
+          // Retry without seated_at
+          const { data: retryTable } = await supabase
+            .from('restaurant_tables')
+            .select('occupants, status')
+            .eq('id', tableName)
+            .eq('establishment_id', establishmentId)
+            .single();
+          tableData = retryTable;
+      }
+
+      const existingOccupants = tableData?.occupants || [];
       const alreadyJoined = existingOccupants.some((occ: any) => occ.email === userEmail);
 
       if (alreadyJoined) {
@@ -241,17 +255,39 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       };
 
       const updatedOccupants = [...existingOccupants, newOccupant];
+      
+      const updateData: any = {
+        status: 'occupied',
+        last_activity_at: new Date().toISOString(),
+        occupants: updatedOccupants
+      };
+
+      // Set seated_at only if it's currently null (new session) AND we have the column
+      // We check if tableData has the property (it might be undefined if column is missing)
+      if (tableData && 'seated_at' in tableData && !tableData.seated_at) {
+        updateData.seated_at = new Date().toISOString();
+      }
+
       const { error } = await supabase
         .from('restaurant_tables')
-        .update({
-          status: 'occupied',
-          last_activity_at: new Date().toISOString(),
-          occupants: updatedOccupants
-        })
+        .update(updateData)
         .eq('id', tableName)
         .eq('establishment_id', establishmentId);
 
-      if (error) throw error;
+      if (error) {
+          // If the error is about seated_at, try to update without it
+          if (error.message.includes('seated_at')) {
+                const { seated_at, ...cleanUpdateData } = updateData;
+                const { error: retryError } = await supabase
+                    .from('restaurant_tables')
+                    .update(cleanUpdateData)
+                    .eq('id', tableName)
+                    .eq('establishment_id', establishmentId);
+                if (retryError) throw retryError;
+          } else {
+              throw error;
+          }
+      }
 
       // Set turnStartTime locally and persist it
       const startTime = new Date();
@@ -305,7 +341,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   );
 
   const totalPrice = cart.reduce((sum, item) => {
-    const price = item.isRodizio ? 0 : item.price;
+    const price = (item.isRodizio || item.price === 0) ? 0 : item.price;
     return sum + (price * item.quantity);
   }, 0);
 
@@ -487,7 +523,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const addToCart = useCallback((item: MenuItem, clientId: string, isAlacarte?: boolean, observation?: string): boolean => {
     const effectiveId = isAlacarte ? `${item.id}-alacarte` : item.id;
-    const effectiveIsRodizio = isAlacarte ? false : (item.isRodizio && hasActiveRodizio);
+    const effectiveIsRodizio = item.isRodizio && hasActiveRodizio;
     if (effectiveIsRodizio && isRoundLimitReached) return false;
 
     const tableIdFromURL = localStorage.getItem('ez_menu_table_name');
@@ -751,7 +787,7 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
     const fetchStatus = async () => {
       try {
-        let query = supabase.from('restaurant_tables').select('status, occupants').eq('id', tableName);
+        let query = supabase.from('restaurant_tables').select('status, occupants, seated_at').eq('id', tableName);
         if (establishmentId) query = query.eq('establishment_id', establishmentId);
         const { data, error } = await query.single();
         if (error) {
@@ -759,7 +795,22 @@ export function OrderProvider({ children }: { children: ReactNode }) {
             setTableStatus('free');
             return;
         }
-        if (data) { setTableStatus(data.status); setOccupants(data.occupants || []); }
+        if (data) { 
+          setTableStatus(data.status); 
+          setOccupants(data.occupants || []); 
+          if (data.seated_at) {
+            const seatedDate = new Date(data.seated_at);
+            setSession(prev => prev ? { ...prev, turnStartTime: seatedDate } : {
+              tableId: tableName,
+              tableName: tableName,
+              clients: data.occupants?.length || 1,
+              turnStartTime: seatedDate,
+              roundLimit: 24,
+              currentRoundItems: 0,
+              roundNumber: 1
+            });
+          }
+        }
       } catch (e) {
         console.error("Error fetching table status", e);
         setTableStatus('free');
@@ -771,6 +822,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'restaurant_tables', filter: `id=eq.${tableName}` }, (payload) => {
         setTableStatus(payload.new.status);
         setOccupants(payload.new.occupants || []);
+        if (payload.new.seated_at) {
+          const seatedDate = new Date(payload.new.seated_at);
+          setSession(prev => prev ? { ...prev, turnStartTime: seatedDate } : null);
+        }
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };

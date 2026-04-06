@@ -9,7 +9,7 @@ export function AdminLogin() {
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const navigate = useNavigate();
-
+    const isStaff = window.location.pathname.includes('/equipe');
     const [loading, setLoading] = useState(false);
 
     const handleLogoutAndLogin = async (e: React.FormEvent) => {
@@ -60,7 +60,11 @@ export function AdminLogin() {
 
                 if (est?.slug) {
                     toast.success('Acesso autorizado!');
-                    navigate(`/${est.slug}/admin`);
+                    if (profile.role === 'waiter') {
+                        navigate(`/${est.slug}/equipe`);
+                    } else {
+                        navigate(`/${est.slug}/admin`);
+                    }
                 } else {
                     toast.error("Estabelecimento não configurado");
                 }
@@ -84,8 +88,12 @@ export function AdminLogin() {
             <div className="w-full max-w-md bg-background p-8 rounded-2xl shadow-xl border border-border">
                 <div className="flex flex-col items-center mb-10">
                     <BrandingLogo variant="dark" className="w-[180px] h-[70px] mb-4" showText={false} skipCustomization={true} />
-                    <h1 className="text-3xl font-black uppercase tracking-tighter text-neutral-900 mb-1">Acesso Gerencial</h1>
-                    <p className="text-[10px] font-bold text-neutral-400 tracking-[0.25em] uppercase">Ez Menu Admin</p>
+                    <h1 className="text-3xl font-black uppercase tracking-tighter text-neutral-900 mb-1">
+                        {isStaff ? 'Acesso da Equipe' : 'Acesso Gerencial'}
+                    </h1>
+                    <p className="text-[10px] font-bold text-neutral-400 tracking-[0.25em] uppercase">
+                        Ez Menu {isStaff ? 'Staff' : 'Admin'}
+                    </p>
                 </div>
 
                 <form onSubmit={handleLogoutAndLogin} className="space-y-4">
@@ -116,7 +124,7 @@ export function AdminLogin() {
                         disabled={loading}
                         className="w-full bg-primary text-primary-foreground font-black uppercase tracking-widest py-4 rounded-2xl hover:bg-primary/90 transition-all shadow-lg shadow-primary/20 flex items-center justify-center gap-2 disabled:opacity-50 active:scale-95 mt-2"
                     >
-                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Acessar Painel'}
+                        {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : isStaff ? 'Entrar no Portal' : 'Acessar Painel'}
                     </button>
                 </form>
             </div>

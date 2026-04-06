@@ -146,22 +146,20 @@
     @apply border-border;
   }
 
+  html, body, #root {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    background-color: hsl(var(--background));
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
+  }
+
   body {
     @apply bg-background text-foreground font-sans antialiased;
     font-family: 'Inter', sans-serif;
-  }
-
-  /* Custom scrollbar for mobile feel */
-  ::-webkit-scrollbar {
-    width: 4px;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-muted;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-secondary rounded-full;
+    min-height: 100dvh;
+    /* Use dvh for dynamic viewport height on mobile */
   }
 }
 

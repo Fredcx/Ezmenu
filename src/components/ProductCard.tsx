@@ -44,8 +44,8 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
   const isOutOfStock = availability === 'out_of_stock';
   const isLowStock = availability === 'low_stock';
 
-  const displayAsRodizio = isAlacarte ? false : item.isRodizio;
-  const effectiveIsRodizio = isAlacarte ? false : (item.isRodizio && hasActiveRodizio);
+  const displayAsRodizio = item.isRodizio && hasActiveRodizio;
+  const effectiveIsRodizio = item.isRodizio && hasActiveRodizio;
   const isBlocked = isOutOfStock || !hasTable || (effectiveIsRodizio && isRoundLimitReached && quantity === 0);
 
   const handleRemove = () => {

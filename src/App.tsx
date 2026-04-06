@@ -34,6 +34,9 @@ import { AdminHistory } from "./components/admin/AdminHistory";
 import DesignTest from "./pages/DesignTest";
 import { OrderProvider } from "./contexts/OrderContext";
 import { PaymentWrapper } from "./components/PaymentWrapper";
+import { AdminStaff } from "./components/admin/AdminStaff";
+import { StaffDashboard } from "./components/admin/StaffDashboard";
+import { StaffLogin } from './components/admin/StaffLogin';
 
 const queryClient = new QueryClient();
 
@@ -72,11 +75,17 @@ const App = () => (
                   <Route path="consumption" element={<AdminConsumption />} />
                   <Route path="discovery" element={<AdminDiscovery />} />
                   <Route path="categories" element={<AdminCategories />} />
+                  <Route path="staff" element={<AdminStaff />} />
                   <Route path="preview" element={<AdminMenuPreview />} />
                   <Route path="queue" element={<AdminQueue />} />
                 </Route>
 
-                {/* 4. Restaurant Access (Consumer) */}
+                {/* 4. Waiter/Staff Portal */}
+                <Route path="/equipe/login" element={<StaffLogin />} />
+                <Route path="/equipe" element={<StaffLogin />} />
+                <Route path="/:slug/equipe" element={<StaffDashboard />} />
+
+                {/* 5. Restaurant Access (Consumer) */}
                 <Route path="/:slug" element={<Index />} />
                 <Route path="/:slug/:categorySlug" element={<Index />} />
 

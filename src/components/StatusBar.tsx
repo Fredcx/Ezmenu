@@ -1,5 +1,6 @@
 import { Monitor, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import { useOrder } from '@/contexts/OrderContext';
+import { useLanguage } from '@/contexts/LanguageContext';
 import { useState, useEffect } from 'react';
 
 interface StatusBarProps {
@@ -9,6 +10,7 @@ interface StatusBarProps {
 
 export function StatusBar({ expanded = false, onToggle }: StatusBarProps) {
   const { session, roundItemsCount } = useOrder();
+  const { t } = useLanguage();
   const [turnTime, setTurnTime] = useState('00:00');
 
   useEffect(() => {
@@ -53,20 +55,20 @@ export function StatusBar({ expanded = false, onToggle }: StatusBarProps) {
       {expanded && (
         <div className="px-3 pb-3 space-y-2 border-t border-white/10 pt-2 animate-fade-in">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Clientes</span>
+            <span className="text-sm text-muted-foreground">{t('clients')}</span>
             <div className="flex items-center gap-1 text-primary">
               <Users className="w-4 h-4" />
               <span className="font-semibold">{clients}</span>
             </div>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Pedido</span>
+            <span className="text-sm text-muted-foreground">{t('orderProgress')}</span>
             <span className="font-semibold text-price">
               {roundItemsCount}/{roundLimit}
             </span>
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-muted-foreground">Turno</span>
+            <span className="text-sm text-muted-foreground">{t('turn')}</span>
             <span className="font-semibold text-price">{turnTime}</span>
           </div>
         </div>
