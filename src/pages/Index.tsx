@@ -198,8 +198,8 @@ function AppContent() {
   };
 
   return (
-    <div className="w-full min-h-[100dvh] flex justify-center bg-background">
-      <div className="w-full min-h-[100dvh] bg-background flex flex-col relative overflow-hidden">
+    <div className="w-full h-[100dvh] flex justify-center bg-background overflow-hidden">
+      <div className="w-full h-full bg-background flex flex-col relative overflow-hidden">
       <div className="flex-1 overflow-hidden relative flex flex-col">
         {activeTab === 'home' && (
           homeView === 'landing' ? (

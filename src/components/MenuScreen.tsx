@@ -55,14 +55,17 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
 
         // Fallback to defaults if no custom mapping exists
         if (!targetName) {
-            if (menuId === 'desserts') targetName = 'sobremesas';
-            else if (menuId === 'drinks') targetName = 'bebidas';
-            else if (menuId === 'wines') targetName = 'vinhos';
-            else if (menuId === 'cocktails') targetName = 'drinks';
+            if (menuId === 'desserts') targetName = 'sobremesa';
+            else if (menuId === 'drinks') targetName = 'bebida';
+            else if (menuId === 'wines') targetName = 'vinho';
+            else if (menuId === 'cocktails') targetName = 'drink';
         }
 
         if (targetName) {
-            const targetCat = alacarteCategories.find(c => c.name.toLowerCase().includes(targetName.toLowerCase()));
+            const normalizedTargetName = targetName.toLowerCase().replace(/s$/, ''); // Remove trailing 's' if any
+            const targetCat = alacarteCategories.find(c => 
+                c.name.toLowerCase().includes(normalizedTargetName)
+            );
             if (targetCat) {
                 handleCategorySelect(targetCat.id);
             }
