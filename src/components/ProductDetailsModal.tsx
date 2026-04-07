@@ -37,6 +37,28 @@ export function ProductDetailsModal({ item, isOpen, onClose, isAlacarte = false 
     const displayAsRodizio = !isAlacarte && item.isRodizio;
     const isBlocked = displayAsRodizio && isRoundLimitReached && quantity === 0;
 
+    const [showUpsell, setShowUpsell] = useState(false);
+
+    // Dynamic upsell item picking logic based on user's selected category
+    // In a real app we would use cross-sell DB data. For MVP, we suggest a drink or dessert.
+    const getUpsellSuggestion = () => {
+        if (!item) return null;
+        if (item.category === 'bebidas' || item.category === 'vinhos' || item.category === 'drinks') {
+            return {
+                id: 'upsell-sobremesa-temp', name: 'Mochi Gelado de Morango',
+                price: 18.90, image: 'https://images.unsplash.com/photo-1563805042-7684c8a9e9ce?w=300&h=200&fit=crop',
+                category: 'sobremesa', isRodizio: false, description: 'Doce japonês recheado com sorvete de morango.', code: 'upsell1'
+            } as MenuItem;
+        } else {
+            return {
+                id: 'upsell-bebida-temp', name: 'Refrigerante Laranja 350ml',
+                price: 8.00, image: 'https://images.unsplash.com/photo-1629203851122-3726ecdf080e?w=300&h=200&fit=crop',
+                category: 'bebidas', isRodizio: false, description: 'Bebida bem gelada para acompanhar.', code: 'upsell2'
+            } as MenuItem;
+        }
+    };
+    const upsellItem = getUpsellSuggestion();
+
     const handleAdd = (customNote?: string) => {
         if (isTableOccupiedByMe === false && item.category !== 'system') {
             toast.error('Ocupe a mesa na tela inicial para fazer pedidos!', {
@@ -60,6 +82,24 @@ export function ProductDetailsModal({ item, isOpen, onClose, isAlacarte = false 
         setTimeout(() => setIsAnimating(false), 300);
     };
 
+    const handleConfirmUpsell = () => {
+        // Add original item
+        handleAdd();
+        // Add upsell item
+        if (upsellItem) {
+            addToCart(upsellItem, currentClientId, true, '[Upsell]');
+            toast.success(`${upsellItem.name} adicionado!`);
+        }
+        setShowUpsell(false);
+        onClose();
+    };
+
+    const handleDeclineUpsell = () => {
+        handleAdd();
+        setShowUpsell(false);
+        onClose();
+    };
+
     const handleRemove = () => {
         const itemInCart = cart.find(i => i.id === targetId && i.addedBy === currentClientId);
         if (itemInCart) {
@@ -67,17 +107,38 @@ export function ProductDetailsModal({ item, isOpen, onClose, isAlacarte = false 
         }
     };
 
+    const handleAddOrUpsell = () => {
+        if (quantity > 0) {
+           onClose();
+           return;
+        }
+        // Only trigger upsell logic if it's alacarte or if we're not repeating
+        if (isAlacarte && !showUpsell && upsellItem) {
+           setShowUpsell(true);
+        } else {
+           handleAdd();
+           onClose();
+        }
+    };
+
     return (
-        <Dialog open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <Dialog open={isOpen} onOpenChange={(open) => {
+            if (!open) {
+                setShowUpsell(false);
+                onClose();
+            }
+        }}>
             <DialogContent className="sm:max-w-md p-0 overflow-hidden bg-card border-border">
                 {/* Close Button Overlay */}
                 <button
-                    onClick={onClose}
+                    onClick={() => { setShowUpsell(false); onClose(); }}
                     className="absolute right-4 top-4 z-50 p-2 bg-black/20 hover:bg-black/40 backdrop-blur-sm rounded-full text-white transition-colors"
                 >
                     <X className="w-5 h-5" />
                 </button>
 
+                {!showUpsell ? (
+                <>
                 {/* Hero Image */}
                 <div className="relative h-64 w-full bg-secondary shrink-0">
                     <img
@@ -148,16 +209,44 @@ export function ProductDetailsModal({ item, isOpen, onClose, isAlacarte = false 
                     )}
 
                     <Button
-                        onClick={() => {
-                            if (quantity === 0) handleAdd();
-                            onClose();
-                        }}
+                        onClick={handleAddOrUpsell}
                         disabled={isBlocked}
                         className={`flex-1 h-12 text-lg font-bold shadow-lg shadow-primary/20 ${quantity > 0 ? 'bg-secondary text-foreground hover:bg-secondary/80' : 'bg-primary text-primary-foreground hover:bg-primary/90'}`}
                     >
                         {quantity > 0 ? 'Concluir' : 'Adicionar ao Pedido'}
                     </Button>
                 </div>
+                </>
+                ) : (
+                /* UPSELL SCREEN */
+                <div className="flex flex-col h-[500px] animate-in slide-in-from-right-4 duration-300">
+                     <div className="flex-1 overflow-y-auto pb-6">
+                        <div className="relative h-48 w-full shrink-0">
+                            <img src={upsellItem?.image} alt={upsellItem?.name} className="w-full h-full object-cover" />
+                            <div className="absolute inset-0 bg-gradient-to-t from-background to-transparent" />
+                        </div>
+                        <div className="px-6 text-center -mt-6 relative z-10 space-y-4">
+                            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-primary/10 text-primary rounded-full text-[10px] font-black uppercase tracking-widest">
+                                <AlertCircle className="w-3.5 h-3.5" /> Recomendações
+                            </div>
+                            <h2 className="text-2xl font-black text-foreground leading-tight">
+                                Que tal acompanhar com <span className="text-primary">{upsellItem?.name}</span>?
+                            </h2>
+                            <p className="text-muted-foreground text-sm font-medium">
+                                Apenas R$ {upsellItem?.price.toFixed(2)}
+                            </p>
+                        </div>
+                     </div>
+                     <div className="p-4 border-t border-border bg-secondary/30 flex gap-3">
+                         <Button onClick={handleDeclineUpsell} variant="outline" className="flex-1 h-12 font-bold text-muted-foreground border-border break-words whitespace-normal text-xs leading-tight">
+                             Não, obrigado
+                         </Button>
+                         <Button onClick={handleConfirmUpsell} className="flex-1 h-12 font-black bg-primary text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/20 break-words whitespace-normal text-xs leading-tight">
+                             Adicionar
+                         </Button>
+                     </div>
+                </div>
+                )}
             </DialogContent>
         </Dialog>
     );

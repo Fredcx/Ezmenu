@@ -37,41 +37,29 @@ export function AdminRecipes() {
     return (
         <div className="space-y-8 animate-in fade-in duration-500 pb-10">
             {/* Header Section */}
-            <div className="flex flex-col md:flex-row justify-between items-end gap-6 pb-6 border-b border-border/40">
-                <div className="space-y-2">
-                    <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold uppercase tracking-wider border border-primary/20 mb-2">
-                        <Sparkles className="w-3 h-3" />
-                        Área de Criação
-                    </div>
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground flex items-center gap-3">
-                        Fichas Técnicas
-                        <span className="text-muted-foreground font-light text-2xl">| Receitas</span>
-                    </h2>
-                    <p className="text-muted-foreground text-lg max-w-2xl font-light">
-                        Configure a composição exata dos seus pratos para um controle de estoque milimétrico.
-                    </p>
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+                <div>
+                    <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Fichas Técnicas</h1>
+                    <p className="text-zinc-400 text-sm mt-0.5">Configure a composição exata dos seus pratos para um controle de estoque milimétrico.</p>
                 </div>
 
-                <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto items-end">
+                <div className="flex items-center gap-3 w-full md:w-auto">
+                    <div className="relative flex items-center bg-white rounded-xl border border-zinc-200 shadow-sm w-full md:w-72">
+                        <Search className="ml-3 w-4 h-4 text-zinc-400" />
+                        <Input
+                            placeholder="Buscar produto ou receita..."
+                            className="border-0 bg-transparent shadow-none focus-visible:ring-0 pl-2 h-11 text-sm placeholder:text-zinc-400"
+                            value={searchTerm}
+                            onChange={(e) => setSearchTerm(e.target.value)}
+                        />
+                    </div>
                     <AddIngredientDialog
                         trigger={
-                            <Button variant="outline" className="gap-2 h-12 border-dashed border-primary/30 hover:border-primary hover:bg-primary/5">
-                                <Plus className="w-4 h-4" /> Criar Insumo Rápido
-                            </Button>
+                            <button className="flex items-center gap-2 bg-white border border-zinc-200 text-zinc-700 px-4 h-11 rounded-xl text-sm font-bold hover:bg-zinc-50 transition-colors shadow-sm whitespace-nowrap">
+                                <Plus className="w-4 h-4" /> Novo Insumo
+                            </button>
                         }
                     />
-                    <div className="relative group w-full md:w-auto">
-                        <div className="absolute -inset-0.5 bg-gradient-to-r from-primary/50 to-orange-600/50 rounded-lg blur opacity-30 group-hover:opacity-75 transition duration-500"></div>
-                        <div className="relative flex items-center bg-background rounded-lg border border-border group-hover:border-primary/50 transition-colors">
-                            <Search className="ml-3 w-5 h-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-                            <Input
-                                placeholder="Buscar produto ou receita..."
-                                className="border-0 bg-transparent focus-visible:ring-0 pl-3 w-full md:w-[280px] h-12 text-base"
-                                value={searchTerm}
-                                onChange={(e) => setSearchTerm(e.target.value)}
-                            />
-                        </div>
-                    </div>
                 </div>
             </div>
 

@@ -31,6 +31,7 @@ import { SuperAdminCustomers } from "./components/admin/SuperAdminCustomers";
 import { SuperAdminReports } from "./components/admin/SuperAdminReports";
 import { SuperAdminUsers } from "./components/admin/SuperAdminUsers";
 import { AdminHistory } from "./components/admin/AdminHistory";
+import { AdminReports } from "./components/admin/AdminReports";
 import DesignTest from "./pages/DesignTest";
 import { OrderProvider } from "./contexts/OrderContext";
 import { PaymentWrapper } from "./components/PaymentWrapper";
@@ -78,6 +79,7 @@ const App = () => (
                   <Route path="staff" element={<AdminStaff />} />
                   <Route path="preview" element={<AdminMenuPreview />} />
                   <Route path="queue" element={<AdminQueue />} />
+                  <Route path="reports" element={<AdminReports />} />
                 </Route>
 
                 {/* 4. Waiter/Staff Portal */}

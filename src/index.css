@@ -18,9 +18,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 0 0% 0%;
 
-    /* Primary - Vibrant Red */
+    /* Primary - Brand Red (consumer-facing only) */
     --primary: 351 83% 53%;
-    /* #ed1b2e approx */
     --primary-foreground: 0 0% 100%;
 
     /* Secondary - Very light gray */
@@ -46,7 +45,19 @@
 
     --radius: 0.75rem;
 
-    /* Custom colors */
+    /* Brand Colors */
+    --brand-red: 351 83% 53%;
+
+    /* Semantic Status Colors */
+    --status-success: 142 72% 29%;   /* green-700 */
+    --status-success-bg: 142 77% 96%; /* green-50 */
+    --status-warning: 32 95% 44%;    /* amber-600 */
+    --status-warning-bg: 48 100% 96%; /* amber-50 */
+    --status-danger: 0 72% 51%;      /* red-600 */
+    --status-danger-bg: 0 86% 97%;   /* red-50 */
+    --status-neutral: 240 4% 46%;    /* zinc-500 */
+
+    /* Consumer app custom colors */
     --price: 351 83% 53%;
     --price-rodizio: 351 83% 53%;
     --success: 142 71% 45%;
@@ -58,6 +69,33 @@
     --status-bar: 0 0% 96%;
     --category-active: 351 83% 53%;
     --category-indicator: 351 83% 53%;
+  }
+
+  /* ============================================
+     ADMIN PANEL — Premium Black Design System
+     Primary = near-black, red = critical alerts only
+  ============================================ */
+  .admin-layout {
+    /* Admin primary: near-black for clean premium look */
+    --primary: 240 6% 7%;          /* #111113 */
+    --primary-foreground: 0 0% 100%;
+    --ring: 240 6% 7%;
+
+    /* Admin backgrounds */
+    --background: 240 5% 96%;     /* zinc-100 */
+    --card: 0 0% 100%;
+    --secondary: 240 5% 96%;      /* zinc-100 */
+
+    /* Refined borders */
+    --border: 240 6% 90%;         /* zinc-200 */
+    --input: 240 6% 90%;
+
+    /* Muted text */
+    --muted-foreground: 240 4% 46%; /* zinc-500 */
+
+    /* Semantic aliases mapped to status tokens */
+    --success: var(--status-success);
+    --warning: var(--status-warning);
   }
 
   .premium-v2 {
@@ -252,6 +290,22 @@
   .tab-indicator {
     @apply h-0.5 bg-primary rounded-full;
   }
+
+  /* ============================================
+     Admin Status Utilities (semantic colors)
+  ============================================ */
+  .status-success {
+    color: hsl(var(--status-success));
+    background-color: hsl(var(--status-success-bg));
+  }
+  .status-warning {
+    color: hsl(var(--status-warning));
+    background-color: hsl(var(--status-warning-bg));
+  }
+  .status-danger {
+    color: hsl(var(--status-danger));
+    background-color: hsl(var(--status-danger-bg));
+  }
 }
 
 @layer utilities {
@@ -345,6 +399,15 @@
 
   .glow-primary-hover:hover {
     box-shadow: 0 0 30px -5px rgba(237, 27, 46, 0.5);
+  }
+
+  /* No scrollbar utility */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
   }
 
   @keyframes pulse-subtle {

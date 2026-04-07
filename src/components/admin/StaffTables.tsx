@@ -1,22 +1,17 @@
-
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { 
-    Users, Clock, Receipt, UtensilsCrossed, 
-    ChevronRight, Armchair, AlertCircle, 
-    Timer, LogOut, CheckCircle2, User, 
-    Fish, Plus
+    Users, Clock, Receipt, Armchair, 
+    Trash2, ChevronRight, CheckCircle2, 
+    CreditCard, Banknote, Utensils, X, Plus
 } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { toast } from 'sonner';
 
 interface TableData {
     id: string;
     seats: number;
-    status: 'free' | 'occupied' | 'waiting_payment' | 'ordered' | 'eating' | 'cleaning';
+    status: 'free' | 'occupied' | 'waiting_payment' | 'ordered' | 'eating' | 'cleaning' | 'timeout';
     last_activity_at: string | null;
     occupants?: any[];
 }
@@ -26,11 +21,15 @@ export function StaffTables() {
     const [establishmentId, setEstablishmentId] = useState<string | null>(null);
     const [tables, setTables] = useState<TableData[]>([]);
     const [orders, setOrders] = useState<any[]>([]);
+    const [menuItems, setMenuItems] = useState<any[]>([]);
     const [currentTime, setCurrentTime] = useState(Date.now());
+    
+    // UI State
     const [selectedTableId, setSelectedTableId] = useState<string | null>(null);
     const [activeTab, setActiveTab] = useState<'info' | 'orders'>('info');
+    const [showCheckout, setShowCheckout] = useState(false);
+    const [showRodizioModal, setShowRodizioModal] = useState(false);
 
-    // Sync current time for timers
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
         return () => clearInterval(interval);
@@ -48,335 +47,377 @@ export function StaffTables() {
             }
             if (!currentId) return;
 
-            // Fetch Tables
-            const { data: tableData } = await supabase
-                .from('restaurant_tables')
-                .select('*')
-                .eq('establishment_id', currentId)
-                .is('is_label', false); // Only real tables
+            const [tablesRes, ordersRes, menuRes] = await Promise.all([
+                 supabase.from('restaurant_tables').select('*').eq('establishment_id', currentId).is('is_label', false),
+                 supabase.from('orders').select('*, order_items(*, menu_items(*))').eq('establishment_id', currentId).neq('status', 'paid').neq('status', 'cancelled').not('status', 'ilike', 'archived%'),
+                 supabase.from('menu_items').select('*').eq('establishment_id', currentId).ilike('code', 'SYS%')
+            ]);
 
-            if (tableData) {
-                setTables(tableData.map(t => ({
-                    id: t.id,
-                    seats: t.seats,
-                    status: t.status || 'free',
-                    last_activity_at: t.last_activity_at,
-                    occupants: t.occupants || []
+            if (tablesRes.data) {
+                setTables(tablesRes.data.map(t => ({
+                    id: t.id, seats: t.seats, status: t.status || 'free',
+                    last_activity_at: t.last_activity_at, occupants: t.occupants || []
                 })));
             }
-
-            // Fetch Active Orders
-            const { data: ordersData } = await supabase
-                .from('orders')
-                .select('*, order_items(*, menu_items(*))')
-                .eq('establishment_id', currentId)
-                .not('status', 'in', '(paid,archived,cancelled)');
-            
-            setOrders(ordersData || []);
-        } catch (error) {
-            console.error(error);
-        }
+            if (ordersRes.data) setOrders(ordersRes.data);
+            if (menuRes.data) setMenuItems(menuRes.data);
+        } catch (error) { console.error(error); }
     };
 
     useEffect(() => {
         fetchData();
         if (establishmentId) {
             const channel = supabase.channel(`staff_sync_${establishmentId}`)
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `establishment_id=eq.${establishmentId}` }, () => fetchData())
-                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `establishment_id=eq.${establishmentId}` }, () => fetchData())
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'restaurant_tables', filter: `establishment_id=eq.${establishmentId}` }, fetchData)
+                .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `establishment_id=eq.${establishmentId}` }, fetchData)
                 .subscribe();
             return () => { supabase.removeChannel(channel); };
         }
     }, [establishmentId, slug]);
 
+    // Helpers
     const getTableMetrics = (tableId: string) => {
         const table = tables.find(t => t.id === tableId);
         if (!table || table.status === 'free') return null;
 
-        const tableOrders = orders.filter(o => o.table_id === tableId);
+        const tableOrders = orders.filter(o => o.table_id === tableId && !(o.status === 'cancelled' || o.status?.startsWith('archived')));
         const satDownAt = table.last_activity_at ? new Date(table.last_activity_at).getTime() : currentTime;
         
-        const total = tableOrders.reduce((sum, o) => {
-            const itemsTotal = (o.order_items || []).reduce((s: number, i: any) => s + (Number(i.price) * i.quantity), 0);
-            return sum + (Number(o.total_amount) || itemsTotal);
-        }, 0);
+        let total = 0;
+        let activeItems = 0;
 
-        return {
-            satDownAt,
-            durationMins: Math.floor((currentTime - satDownAt) / 60000),
-            total,
-            orderCount: tableOrders.length,
-            occupants: table.occupants || []
-        };
+        tableOrders.forEach(o => {
+            (o.order_items || []).forEach((i: any) => {
+                if (i.status !== 'cancelled') {
+                    total += (Number(i.price) * i.quantity);
+                    activeItems++;
+                }
+            });
+        });
+
+        return { satDownAt, durationMins: Math.floor((currentTime - satDownAt) / 60000), total, orderCount: activeItems };
     };
 
-    const releaseTable = async (tableId: string) => {
-        if (!confirm(`Deseja realmente liberar a Mesa ${tableId}?`)) return;
-
-        try {
-            const tableOrders = orders.filter(o => o.table_id === tableId);
-            if (tableOrders.length > 0) {
-                const orderIds = tableOrders.map(o => o.id);
-                await supabase.from('orders').update({ status: 'archived', completed_at: new Date().toISOString() }).in('id', orderIds);
-                await supabase.from('order_items').update({ status: 'ready' }).in('order_id', orderIds).neq('status', 'ready');
-            }
-
-            await supabase.from('restaurant_tables').update({
-                status: 'free',
-                last_activity_at: null,
-                occupants: []
-            }).eq('id', tableId).eq('establishment_id', establishmentId);
-
-            toast.success(`Mesa ${tableId} liberada!`);
-            setSelectedTableId(null);
-            fetchData();
-        } catch (error) {
-            console.error(error);
-            toast.error("Erro ao liberar mesa");
-        }
-    };
-
-    const getTableStatusLabel = (status: string) => {
-        switch (status) {
-            case 'occupied': return 'Ocupada';
-            case 'ordered': return 'Pedido Feito';
-            case 'eating': return 'Comendo';
-            case 'waiting_payment': return 'Pagamento';
-            case 'free': return 'Livre';
-            default: return status;
-        }
-    };
-
-    const getStatusColor = (status: string) => {
-        switch (status) {
-            case 'occupied': return 'bg-red-500';
-            case 'ordered': return 'bg-orange-500';
-            case 'eating': return 'bg-blue-500';
-            case 'waiting_payment': return 'bg-amber-500';
-            case 'free': return 'bg-emerald-500';
-            default: return 'bg-zinc-400';
-        }
-    };
-
-    const formatTime = (ms: number) => {
-        const totalSec = Math.floor(ms / 1000);
-        const h = Math.floor(totalSec / 3600);
-        const m = Math.floor((totalSec % 3600) / 60);
-        const s = totalSec % 60;
-        return h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
-    };
-
-    const selectedMetrics = selectedTableId ? getTableMetrics(selectedTableId) : null;
-    const selectedTable = tables.find(t => t.id === selectedTableId);
-
-    const getLastOrders = (tableId: string) => {
-        const tableOrders = orders.filter(o => o.table_id === tableId);
+    const getOrderedItems = (tableId: string) => {
+        const tableOrders = orders.filter(o => o.table_id === tableId && !(o.status === 'cancelled' || o.status?.startsWith('archived')));
         const allItems: any[] = [];
         tableOrders.forEach(o => {
-            if (o.order_items) {
-                allItems.push(...o.order_items.map((oi: any) => ({
-                    ...oi,
-                    _author: o.customer_name || 'Cliente',
-                    _time: o.created_at
-                })));
-            }
+            (o.order_items || []).forEach((oi: any) => {
+                allItems.push({ ...oi, _orderId: o.id, _time: o.created_at, _author: o.customer_name || 'Mesa' });
+            });
         });
-        return allItems.reverse();
+        return allItems.sort((a, b) => new Date(b._time).getTime() - new Date(a._time).getTime());
     };
 
+    // Actions
+    const cancelOrderItem = async (itemId: string, orderId: string) => {
+        if (!confirm('Deseja cancelar (debitar) este item da conta?')) return;
+        try {
+            await supabase.from('order_items').update({ status: 'cancelled' }).eq('id', itemId);
+            toast.success('Item removido da conta');
+            fetchData();
+        } catch {
+            toast.error('Erro ao cancelar item');
+        }
+    };
+
+    const addManualRodizio = async (menuItem: any, qty: number) => {
+        if (qty <= 0) return;
+        try {
+            let activeOrder = orders.find(o => o.table_id === selectedTableId && !(o.status === 'cancelled' || o.status === 'completed' || o.status === 'paid' || o.status?.startsWith('archived')));
+            let orderId = activeOrder?.id;
+
+            if (!activeOrder) {
+                const { data, error } = await supabase.from('orders').insert({
+                    establishment_id: establishmentId,
+                    table_id: selectedTableId,
+                    status: 'pending',
+                    customer_name: 'Garçom (Lançamento)',
+                    total_amount: 0
+                }).select('id').single();
+                if (error) throw error;
+                orderId = data.id;
+            }
+
+            const { error: itemErr } = await supabase.from('order_items').insert({
+                order_id: orderId,
+                item_id: menuItem.id,
+                quantity: qty,
+                price: menuItem.price,
+                status: 'pending',
+                notes: 'Lançamento Manual',
+                observation: ''
+            });
+            if (itemErr) throw itemErr;
+
+            await supabase.from('restaurant_tables').update({ 
+                status: 'occupied',
+                last_activity_at: new Date().toISOString()
+            }).eq('id', selectedTableId);
+            
+            toast.success(`${qty}x ${menuItem.name} adicionado!`);
+            setShowRodizioModal(false);
+            fetchData();
+        } catch (e) {
+            toast.error('Erro ao lançar item');
+        }
+    };
+
+    const completeCheckout = async (method: 'credit' | 'debit' | 'cash' | 'app') => {
+        if (!selectedTableId) return;
+        try {
+            const tableOrders = orders.filter(o => o.table_id === selectedTableId && !(o.status === 'cancelled' || o.status?.startsWith('archived')));
+             if (tableOrders.length > 0) {
+                 const orderIds = tableOrders.map(o => o.id);
+                 await supabase.from('orders').update({ status: `archived_${method}`, completed_at: new Date().toISOString() }).in('id', orderIds);
+                 await supabase.from('order_items').update({ status: 'ready' }).in('order_id', orderIds).neq('status', 'ready').neq('status', 'cancelled');
+             }
+ 
+             await supabase.from('restaurant_tables').update({ status: 'free', last_activity_at: null, occupants: [] }).eq('id', selectedTableId);
+             
+             toast.success(`Mesa ${selectedTableId} paga via ${method}! Encerrada.`);
+             setSelectedTableId(null);
+             setShowCheckout(false);
+             fetchData();
+        } catch (e) {
+            toast.error('Erro ao encerrar mesa');
+        }
+    };
+
+    const selectedTable = tables.find(t => t.id === selectedTableId);
+    const metrics = selectedTableId ? getTableMetrics(selectedTableId) : null;
+    const items = selectedTableId ? getOrderedItems(selectedTableId) : [];
+
+    // Filter out old tables
+    const displayTables = tables.filter(t => !t.id.startsWith('DIV_') && !t.id.startsWith('LABEL_')).sort((a,b) => {
+        const numA = parseInt(a.id.replace(/\D/g, '')) || a.id.charCodeAt(0);
+        const numB = parseInt(b.id.replace(/\D/g, '')) || b.id.charCodeAt(0);
+        return numA - numB || a.id.localeCompare(b.id);
+    });
+
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                {tables.sort((a, b) => a.id.localeCompare(b.id, undefined, { numeric: true })).map(table => {
-                    const metrics = getTableMetrics(table.id);
+        <div className="relative">
+            {/* Grid */}
+            <div className="grid grid-cols-2 gap-3 pb-24">
+                {displayTables.map(table => {
                     const isOccupied = table.status !== 'free';
+                    const m = getTableMetrics(table.id);
+                    const isAlert = table.status === 'timeout' || table.status === 'waiting_payment';
 
                     return (
-                        <div 
+                        <button
                             key={table.id}
-                            onClick={() => {
-                                setSelectedTableId(table.id);
-                                setActiveTab('info');
-                            }}
-                            className={`group relative bg-white rounded-3xl border border-border/40 p-5 shadow-sm hover:shadow-xl hover:border-primary/20 transition-all cursor-pointer overflow-hidden
-                                ${isOccupied ? 'ring-1 ring-black/[0.02]' : 'opacity-80 hover:opacity-100'}`}
+                            onClick={() => { setSelectedTableId(table.id); setActiveTab('info'); }}
+                            className={`text-left relative p-4 rounded-3xl border transition-all active:scale-95 shadow-sm overflow-hidden min-h-[110px] flex flex-col justify-between ${
+                                isOccupied ? 'bg-zinc-900 border-zinc-900' : 'bg-white border-zinc-200'
+                            } ${isAlert ? 'ring-4 ring-amber-400/30' : ''}`}
                         >
-                            <div className="flex justify-between items-start mb-4">
+                            <div className="flex justify-between items-start w-full">
                                 <div>
-                                    <h3 className="text-2xl font-black tracking-tighter uppercase leading-none mb-1">Mesa {table.id}</h3>
-                                    <div className="flex items-center gap-1.5">
-                                        <div className={`w-2 h-2 rounded-full ${getStatusColor(table.status)}`} />
-                                        <span className="text-[10px] font-bold uppercase tracking-widest text-muted-foreground opacity-60">
-                                            {getTableStatusLabel(table.status)}
-                                        </span>
-                                    </div>
+                                    <h3 className={`text-xl font-black tracking-tight leading-none ${isOccupied ? 'text-white' : 'text-zinc-900'}`}>
+                                        M-{table.id}
+                                    </h3>
                                 </div>
-                                <div className={`p-2.5 rounded-2xl ${isOccupied ? 'bg-primary/5 text-primary' : 'bg-secondary/40 text-muted-foreground'}`}>
-                                    <Armchair className="w-5 h-5" />
-                                </div>
+                                <div className={`w-2.5 h-2.5 rounded-full shadow-sm ${
+                                    isAlert ? 'bg-amber-400 animate-pulse' : 
+                                    isOccupied ? 'bg-red-500' : 'bg-emerald-400'
+                                }`} />
                             </div>
 
-                            {isOccupied && metrics ? (
-                                <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2 duration-300">
-                                    <div className="flex justify-between items-end">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Timer className="w-3.5 h-3.5" />
-                                                <span className="text-xs font-bold font-mono">{formatTime(currentTime - metrics.satDownAt)}</span>
-                                            </div>
-                                            <div className="flex items-center gap-2 text-muted-foreground">
-                                                <Users className="w-3.5 h-3.5" />
-                                                <span className="text-xs font-bold">{metrics.occupants.length} pessoas</span>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-[10px] font-bold text-muted-foreground uppercase opacity-40 leading-none mb-1">Subtotal</p>
-                                            <p className="text-xl font-black text-foreground tracking-tighter">
-                                                R$ {metrics.total.toFixed(2)}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    
-                                    <div className="flex gap-2">
-                                        <div className="flex-1 px-3 py-2 rounded-xl bg-secondary/30 flex items-center justify-between">
-                                            <div className="flex items-center gap-2">
-                                                <Clock className="w-3.5 h-3.5 text-muted-foreground" />
-                                                <span className="text-[10px] font-bold text-muted-foreground uppercase">{metrics.orderCount} pedidos</span>
-                                            </div>
-                                            <ChevronRight className="w-4 h-4 text-primary" />
-                                        </div>
-                                    </div>
+                            {isOccupied && m ? (
+                                <div className="mt-2 w-full">
+                                    <p className="text-zinc-400 font-mono text-xs">{m.durationMins}m</p>
+                                    <p className="text-white font-bold tracking-tight text-lg mt-0.5">R$ {m.total.toFixed(2)}</p>
                                 </div>
                             ) : (
-                                <div className="py-6 flex flex-col items-center justify-center border-2 border-dashed border-border/20 rounded-2xl opacity-40">
-                                    <div className="w-8 h-8 rounded-full bg-secondary flex items-center justify-center mb-2">
-                                        <Plus className="w-4 h-4" />
-                                    </div>
-                                    <span className="text-[10px] font-bold uppercase tracking-widest">Abrir Mesa</span>
+                                <div className="mt-auto w-full flex items-center gap-1.5 text-zinc-400">
+                                    <Users className="w-3.5 h-3.5" />
+                                    <span className="text-[10px] font-bold">{table.seats}</span>
                                 </div>
                             )}
-
-                            <div className={`absolute top-0 right-0 w-1.5 h-full ${getStatusColor(table.status)} opacity-80`} />
-                        </div>
+                        </button>
                     );
                 })}
             </div>
 
-            {/* Details Modal */}
-            <Dialog open={!!selectedTableId} onOpenChange={() => setSelectedTableId(null)}>
-                <DialogContent className="max-w-2xl w-[95vw] rounded-[2.5rem] p-0 overflow-hidden bg-white/80 backdrop-blur-2xl border-white/40 shadow-2xl">
-                    <DialogHeader className="p-8 pb-0">
-                        <div className="flex items-center justify-between">
-                            <div className="flex items-center gap-4">
-                                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-white shadow-lg ${getStatusColor(selectedTable?.status || 'free')}`}>
-                                    <Armchair className="w-6 h-6" />
+            {/* Table Detail Modal (Fullscreen for Mobile) */}
+            {selectedTableId && selectedTable && (
+                <div className="fixed inset-0 z-[100] bg-zinc-50 flex flex-col animate-in slide-in-from-bottom-full duration-300">
+                    
+                    {/* Dark Header */}
+                    <header className="bg-zinc-900 px-5 pt-8 pb-5 flex items-start justify-between shrink-0 relative overflow-hidden rounded-b-3xl shadow-lg">
+                        <div className="flex gap-4 items-center relative z-10 w-full">
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center shrink-0 border border-white/10 shadow-inner ${selectedTable.status === 'free' ? 'bg-emerald-500/20 text-emerald-400' : 'bg-white/10 text-white'}`}>
+                                <Armchair className="w-6 h-6" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                    <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest leading-none ${selectedTable.status === 'free' ? 'bg-emerald-500 text-white' : 'bg-red-500 text-white'}`}>
+                                        {selectedTable.status === 'free' ? 'Livre' : 'Ocupada'}
+                                    </span>
                                 </div>
-                                <div>
-                                    <DialogTitle className="text-3xl font-black tracking-tighter uppercase leading-none mb-1">Mesa {selectedTableId}</DialogTitle>
-                                    <DialogDescription className="text-[10px] font-bold uppercase tracking-widest text-primary">
-                                        {getTableStatusLabel(selectedTable?.status || 'free')}
-                                    </DialogDescription>
+                                <h3 className="text-3xl font-black text-white tracking-tighter truncate">Mesa {selectedTable.id}</h3>
+                            </div>
+                            <button onClick={() => { setSelectedTableId(null); setShowCheckout(false); setShowRodizioModal(false); }} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0 active:scale-95 transition-transform">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                    </header>
+
+                    {selectedTable.status !== 'free' && metrics ? (
+                        <div className="flex-1 flex flex-col overflow-hidden pb-safe">
+                            <div className="flex px-4 pt-4 shrink-0">
+                                <div className="bg-zinc-200/50 p-1 rounded-xl flex w-full">
+                                    <button onClick={() => setActiveTab('info')} className={`flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'info' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>Conta</button>
+                                    <button onClick={() => setActiveTab('orders')} className={`flex-1 py-2 text-[11px] font-bold uppercase tracking-wider rounded-lg transition-all ${activeTab === 'orders' ? 'bg-white shadow-sm text-zinc-900' : 'text-zinc-500'}`}>Histórico</button>
                                 </div>
                             </div>
-                            {selectedTable?.status !== 'free' && (
-                                <Button 
-                                    variant="outline" 
-                                    className="rounded-xl border-red-100 text-red-500 hover:bg-red-50 gap-2 h-12 px-4 font-bold"
-                                    onClick={() => releaseTable(selectedTableId!)}
-                                >
-                                    <LogOut className="w-4 h-4" /> Liberar
-                                </Button>
-                            )}
-                        </div>
-                    </DialogHeader>
 
-                    {selectedTable?.status !== 'free' ? (
-                        <div className="flex flex-col h-[500px]">
-                            <Tabs value={activeTab} onValueChange={(v: any) => setActiveTab(v)} className="flex-1 flex flex-col pt-6">
-                                <TabsList className="mx-8 bg-secondary/40 p-1.5 rounded-2xl h-14">
-                                    <TabsTrigger value="info" className="flex-1 rounded-xl gap-2 font-bold uppercase text-[10px] tracking-widest data-[state=active]:bg-white data-[state=active]:text-primary">
-                                        <Users className="w-4 h-4" /> Integrantes
-                                    </TabsTrigger>
-                                    <TabsTrigger value="orders" className="flex-1 rounded-xl gap-2 font-bold uppercase text-[10px] tracking-widest data-[state=active]:bg-white data-[state=active]:text-primary">
-                                        <Receipt className="w-4 h-4" /> Pedidos
-                                    </TabsTrigger>
-                                </TabsList>
-
-                                <div className="flex-1 overflow-y-auto px-8 py-6">
-                                    <TabsContent value="info" className="m-0 space-y-6">
-                                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                            {selectedMetrics?.occupants.map((p, idx) => (
-                                                <div key={idx} className="flex items-center justify-between p-3 rounded-2xl bg-white border border-border/40 shadow-sm">
-                                                    <div className="flex items-center gap-3">
-                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-xs">
-                                                            {p.name.substring(0, 2).toUpperCase()}
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-bold text-sm leading-none">{p.name}</span>
-                                                            <span className="text-[10px] text-muted-foreground">{p.type === 'rodizio' ? 'Rodízio' : 'À La Carte'}</span>
-                                                        </div>
-                                                    </div>
+                            <div className="flex-1 overflow-y-auto p-4 content-area">
+                                {activeTab === 'info' ? (
+                                    <div className="space-y-4">
+                                        <div className="bg-white rounded-3xl p-6 shadow-sm border border-zinc-100 flex flex-col items-center text-center">
+                                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Total da Mesa</p>
+                                            <p className="text-5xl font-black text-zinc-900 tracking-tighter">R$ {metrics.total.toFixed(2)}</p>
+                                            <div className="flex items-center gap-3 mt-4">
+                                                <div className="flex items-center gap-1.5 text-zinc-500 bg-zinc-100 px-3 py-1.5 rounded-lg text-xs font-bold">
+                                                    <Clock className="w-3.5 h-3.5" /> {metrics.durationMins} min
                                                 </div>
-                                            ))}
-                                        </div>
-
-                                        <div className="bg-primary/5 rounded-3xl p-6 border border-primary/10">
-                                            <div className="flex justify-between items-center mb-1">
-                                                <span className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Subtotal Acumulado</span>
-                                                <Timer className="w-4 h-4 text-primary" />
-                                            </div>
-                                            <div className="flex justify-between items-end">
-                                                <p className="text-4xl font-black tracking-tighter">R$ {selectedMetrics?.total.toFixed(2)}</p>
-                                                <p className="text-xs font-bold text-primary font-mono bg-white px-3 py-1 rounded-full shadow-sm mb-1">
-                                                    {selectedMetrics ? formatTime(currentTime - selectedMetrics.satDownAt) : ''}
-                                                </p>
+                                                <div className="flex items-center gap-1.5 text-zinc-500 bg-zinc-100 px-3 py-1.5 rounded-lg text-xs font-bold">
+                                                    <Utensils className="w-3.5 h-3.5" /> {metrics.orderCount} itens
+                                                </div>
                                             </div>
                                         </div>
-                                    </TabsContent>
 
-                                    <TabsContent value="orders" className="m-0 space-y-3">
-                                        {getLastOrders(selectedTableId!).map((item, idx) => (
-                                            <div key={idx} className="flex items-center gap-4 p-4 rounded-2xl bg-white border border-border/40 shadow-sm relative overflow-hidden group">
-                                                <div className="w-10 h-10 rounded-xl bg-secondary/50 flex items-center justify-center font-bold text-foreground">
+                                        <button 
+                                            onClick={() => setShowRodizioModal(true)}
+                                            className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-zinc-100 text-zinc-900 font-bold border border-zinc-200 active:scale-95 transition-transform"
+                                        >
+                                            <Plus className="w-5 h-5" /> Lançar Item / Rodízio
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-3 pb-6">
+                                        {items.map((item, idx) => (
+                                            <div key={idx} className={`p-4 rounded-2xl border flex items-center justify-between gap-3 ${item.status === 'cancelled' ? 'bg-red-50 border-red-100 opacity-60' : 'bg-white border-zinc-100 shadow-sm'}`}>
+                                                <div className={`w-8 h-8 rounded-lg flex items-center justify-center shrink-0 font-black text-xs ${item.status === 'cancelled' ? 'bg-red-100 text-red-600' : 'bg-zinc-100 text-zinc-700'}`}>
                                                     {item.quantity}x
                                                 </div>
-                                                <div className="flex-1">
-                                                    <div className="flex justify-between items-start">
-                                                        <h5 className="font-bold text-sm">{item.menu_items?.name}</h5>
-                                                        <span className="font-mono text-xs font-bold text-primary">R$ {(item.price * item.quantity).toFixed(2)}</span>
-                                                    </div>
-                                                    <div className="flex items-center gap-2 mt-1">
-                                                        <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">
-                                                            Pôr {item._author}
-                                                        </span>
-                                                        <div className="w-1 h-1 rounded-full bg-zinc-300" />
-                                                        <span className="text-[10px] font-bold text-muted-foreground uppercase opacity-60">
-                                                            {new Date(item._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                                        </span>
-                                                    </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <p className={`font-bold text-sm truncate ${item.status === 'cancelled' ? 'line-through text-red-500' : 'text-zinc-900'}`}>{item.menu_items?.name}</p>
+                                                    <p className="text-[10px] text-zinc-400 font-bold">R$ {(item.price * item.quantity).toFixed(2)} · {new Date(item._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
                                                 </div>
+                                                {item.status !== 'cancelled' && (
+                                                    <button 
+                                                        onClick={() => cancelOrderItem(item.id, item._orderId)}
+                                                        className="shrink-0 w-10 h-10 flex items-center justify-center rounded-xl bg-red-50 text-red-500 hover:bg-red-100 active:scale-95 transition-colors"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                )}
+                                                {item.status === 'cancelled' && (
+                                                    <span className="text-[9px] font-black uppercase text-red-500">Estornado</span>
+                                                )}
                                             </div>
                                         ))}
-                                    </TabsContent>
-                                </div>
-                            </Tabs>
+                                        {items.length === 0 && (
+                                            <p className="text-center text-zinc-400 text-sm py-10 font-medium">Nenhum item lançado</p>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Checkout Footer Bar */}
+                            <div className="bg-white border-t border-zinc-200 p-4 shrink-0 pb-safe">
+                                <button 
+                                    onClick={() => setShowCheckout(true)}
+                                    className="w-full bg-emerald-500 text-white rounded-2xl py-4 font-black flex items-center justify-center gap-2 text-base active:scale-95 transition-transform shadow-lg shadow-emerald-500/20"
+                                >
+                                    <CheckCircle2 className="w-6 h-6" /> Fechar Conta (R$ {metrics.total.toFixed(2)})
+                                </button>
+                            </div>
                         </div>
                     ) : (
-                        <div className="p-12 text-center space-y-6">
-                            <div className="w-20 h-20 bg-emerald-50 text-emerald-500 rounded-3xl flex items-center justify-center mx-auto shadow-xl shadow-emerald-500/10">
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center space-y-6">
+                            <div className="w-24 h-24 bg-zinc-100 text-zinc-300 rounded-[2rem] flex items-center justify-center shadow-inner">
                                 <Armchair className="w-10 h-10" />
                             </div>
-                            <div className="space-y-2">
-                                <h3 className="text-xl font-black tracking-tight">Mesa Disponível</h3>
-                                <p className="text-sm text-muted-foreground px-8">Esta mesa está livre no momento. Peça aos clientes para escanearem o código QR para iniciar o atendimento.</p>
+                            <div>
+                                <h3 className="text-2xl font-black tracking-tight text-zinc-900 mb-2">Mesa Livre</h3>
+                                <p className="text-sm text-zinc-500 leading-relaxed">Aguarde os clientes escanearem o QR Code ou adicione um rodízio manualmente para abrir a mesa.</p>
                             </div>
-                            <Button className="w-full h-14 rounded-2xl font-black uppercase tracking-widest gap-3" onClick={() => setSelectedTableId(null)}>
-                                Voltar ao Mapa
-                            </Button>
+                            <button 
+                                onClick={() => setShowRodizioModal(true)}
+                                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-zinc-900 text-white font-bold active:scale-95 transition-transform shadow-sm"
+                            >
+                                <Plus className="w-5 h-5" /> Iniciar Mesa (Lançar Rodízio)
+                            </button>
+                            <button onClick={() => setSelectedTableId(null)} className="w-full py-4 text-xs font-bold text-zinc-500">Voltar ao Mapa</button>
                         </div>
                     )}
-                </DialogContent>
-            </Dialog>
+                </div>
+            )}
+
+            {/* Manual Throw Modal */}
+            {showRodizioModal && (
+                <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center animate-in fade-in duration-200">
+                    <div className="bg-white w-full sm:w-[400px] h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-8 duration-300">
+                        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
+                            <h4 className="font-black text-lg text-zinc-900">Lançamento Direto</h4>
+                            <button onClick={() => setShowRodizioModal(false)} className="p-2 bg-white rounded-full border border-zinc-200 text-zinc-500"><X className="w-4 h-4" /></button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest px-1 mb-2">Selecione o Rodízio</p>
+                            {menuItems.map(m => (
+                                <div key={m.id} className="bg-white border border-zinc-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                                    <div>
+                                        <p className="font-bold text-sm text-zinc-900">{m.name}</p>
+                                        <p className="text-emerald-600 font-bold text-xs">R$ {m.price.toFixed(2)}</p>
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => addManualRodizio(m, 1)} className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 1</button>
+                                        <button onClick={() => addManualRodizio(m, 2)} className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 2</button>
+                                    </div>
+                                </div>
+                            ))}
+                            {menuItems.length === 0 && (
+                                <p className="text-center text-zinc-400 text-sm py-10 font-medium">Nenhum rodízio cadastrado no cardápio.</p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Checkout Modal */}
+            {showCheckout && (
+                <div className="fixed inset-0 z-[120] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center animate-in fade-in duration-200">
+                    <div className="bg-white w-full sm:w-[360px] p-6 sm:rounded-3xl rounded-t-3xl shadow-2xl animate-in slide-in-from-bottom-8 duration-300">
+                        <div className="flex justify-between items-start mb-6">
+                            <div>
+                                <h4 className="font-black text-2xl text-zinc-900 mb-1">Pagamento</h4>
+                                <p className="text-sm font-bold text-zinc-500">Mesa {selectedTableId}</p>
+                            </div>
+                            <button onClick={() => setShowCheckout(false)} className="w-8 h-8 flex items-center justify-center bg-zinc-100 rounded-full text-zinc-500"><X className="w-4 h-4" /></button>
+                        </div>
+                        
+                        <div className="bg-zinc-50 rounded-2xl p-5 mb-6 text-center border border-zinc-200">
+                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-1">Total a cobrar</p>
+                            <p className="text-4xl font-black text-emerald-600 tracking-tighter">R$ {metrics?.total.toFixed(2)}</p>
+                        </div>
+
+                        <div className="space-y-3">
+                            <button onClick={() => completeCheckout('credit')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
+                                <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0"><CreditCard className="w-6 h-6" /></div>
+                                <div><p className="font-black text-zinc-900 text-lg">Maquininha</p><p className="text-xs font-bold text-zinc-500">Crédito ou Débito</p></div>
+                            </button>
+                            <button onClick={() => completeCheckout('cash')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
+                                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0"><Banknote className="w-6 h-6" /></div>
+                                <div><p className="font-black text-zinc-900 text-lg">Dinheiro</p><p className="text-xs font-bold text-zinc-500">Pagamento em espécie</p></div>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

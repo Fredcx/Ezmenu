@@ -146,6 +146,8 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
         onSelectOption(option);
     };
 
+    const [showCategories, setShowCategories] = useState(!hasTable || isTableOccupiedByMe);
+
     return (
         <div className="h-full overflow-y-auto bg-background text-foreground relative no-scrollbar">
             <div className="fixed inset-0 z-0 opacity-[0.03] pointer-events-none"
@@ -192,39 +194,55 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                     </div>
                     <div className="h-6" /> 
 
-                    {hasTable && tableName && (tableStatus === 'free' || (tableStatus === 'occupied' && !isTableOccupiedByMe)) && (
-                        <div className="px-4 mb-12 max-w-sm mx-auto animate-in slide-in-from-bottom-8 duration-700">
+                    {!showCategories ? (
+                        <div className="px-4 mb-12 max-w-sm mx-auto animate-in slide-in-from-bottom-8 duration-700 flex flex-col gap-4">
+                            {hasTable && tableName && (tableStatus === 'free' || (tableStatus === 'occupied' && !isTableOccupiedByMe)) && (
+                                <button
+                                    onClick={async () => {
+                                        await handleOccupy();
+                                        setShowCategories(true);
+                                    }}
+                                    disabled={isOccupying}
+                                    className="w-full relative group overflow-hidden py-6 rounded-[2.5rem] bg-primary text-primary-foreground shadow-2xl shadow-primary/40 hover:shadow-premium-hover transition-premium hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-4 border-b-4 border-black/20"
+                                >
+                                    <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-shimmer" />
+                                    {isOccupying ? <Loader2 className="w-6 h-6 animate-spin" /> : <Armchair className="w-6 h-6" />}
+                                    <span className="text-sm sm:text-lg font-black tracking-tight uppercase">
+                                        {tableStatus === 'occupied' ? 'Entrar e Pedir' : 'Ocupar mesa e pedir'}
+                                    </span>
+                                </button>
+                            )}
+
                             <button
-                                onClick={handleOccupy}
-                                disabled={isOccupying}
-                                className="w-full relative group overflow-hidden py-6 rounded-[2.5rem] bg-primary text-primary-foreground shadow-2xl shadow-primary/40 hover:shadow-premium-hover transition-premium hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-4 border-b-4 border-black/20"
+                                onClick={() => setShowCategories(true)}
+                                className="w-full relative py-6 rounded-[2.5rem] bg-secondary text-secondary-foreground shadow-xl border border-border/50 hover:-translate-y-1 active:scale-95 flex items-center justify-center gap-2 transition-all"
                             >
-                                <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:animate-shimmer" />
-                                {isOccupying ? <Loader2 className="w-6 h-6 animate-spin" /> : <Armchair className="w-6 h-6" />}
-                                <span className="text-xl font-black tracking-tight uppercase">
-                                    {tableStatus === 'occupied' ? 'Entrar na Mesa' : 'Ocupar Mesa'}
+                                <span className="text-sm sm:text-lg font-bold tracking-tight uppercase px-4">
+                                    Somente visualizar cardápio
                                 </span>
-                                <ChevronRight className="w-5 h-5 opacity-50 group-hover:translate-x-1 transition-transform duration-500" />
                             </button>
                         </div>
-                    )}
+                    ) : (
+                        <>
+                        {hasTable && tableStatus === 'occupied' && isTableOccupiedByMe && (
+                            <div className="px-6 mb-12 text-emerald-600 bg-emerald-50/80 backdrop-blur-sm border border-emerald-200/50 py-5 rounded-[2rem] shadow-premium animate-in fade-in duration-500 mx-auto max-w-sm flex items-center justify-center gap-3">
+                                <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Você está nesta mesa</p>
+                            </div>
+                        )}
 
-                    {hasTable && tableStatus === 'occupied' && isTableOccupiedByMe && (
-                        <div className="px-6 mb-12 text-emerald-600 bg-emerald-50/80 backdrop-blur-sm border border-emerald-200/50 py-5 rounded-[2rem] shadow-premium animate-in fade-in duration-500 mx-auto max-w-sm flex items-center justify-center gap-3">
-                            <div className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em]">Você está nesta mesa</p>
-                        </div>
-                    )}
-
-                    {hasTable && tableStatus === 'waiting_payment' && (
-                        <div className="px-6 mb-12 text-orange-600 bg-orange-50/80 backdrop-blur-sm border border-orange-200/50 py-5 rounded-[2rem] shadow-premium animate-pulse mx-auto max-w-sm">
-                            <p className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando Maquininha</p>
-                            <p className="text-[9px] font-bold opacity-60">O garçom já foi notificado.</p>
-                        </div>
+                        {hasTable && tableStatus === 'waiting_payment' && (
+                            <div className="px-6 mb-12 text-orange-600 bg-orange-50/80 backdrop-blur-sm border border-orange-200/50 py-5 rounded-[2rem] shadow-premium animate-pulse mx-auto max-w-sm">
+                                <p className="text-[10px] font-black uppercase tracking-[0.2em]">Aguardando Maquininha</p>
+                                <p className="text-[9px] font-bold opacity-60">O garçom já foi notificado.</p>
+                            </div>
+                        )}
+                        </>
                     )}
                 </div>
 
-                <div className="px-6 flex-1">
+                {showCategories && (
+                <div className="px-6 flex-1 animate-in fade-in slide-in-from-bottom-8 duration-700">
                     <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 m-auto max-w-sm sm:max-w-2xl lg:max-w-5xl xl:max-w-7xl mb-20">
                         {options.map((option, idx) => (
                             <button
@@ -233,7 +251,7 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                                 className="group relative overflow-hidden rounded-[2.5rem] bg-card shadow-premium border border-border/30 transition-premium hover:shadow-premium-hover hover:-translate-y-1 active:scale-95 aspect-[3/4] w-full outline-none isolation-isolate transform-gpu will-change-transform"
                                 style={{
                                     animationDelay: `${idx * 150}ms`,
-                                    WebkitMaskImage: '-webkit-radial-gradient(white, black)' // Fix for Safari/Chrome overflow-hidden bugs
+                                    WebkitMaskImage: '-webkit-radial-gradient(white, black)'
                                 }}
                             >
                                 <div
@@ -258,11 +276,11 @@ export function LandingScreen({ onSelectOption, hasTable = false }: LandingScree
                         ))}
                     </div>
 
-                    {/* Footer Branding */}
                     <div className="py-20 flex flex-col items-center justify-center select-none pb-40 opacity-40">
                         <BrandingLogo variant="dark" className="w-12 h-12" showText={true} />
                     </div>
                 </div>
+                )}
             </div>
         </div>
     );

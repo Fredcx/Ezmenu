@@ -1,19 +1,12 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
-import { 
-    ShoppingBag, Search, Calendar, ChevronRight, 
-    ArrowLeft, User, MapPin, Receipt, Clock, 
-    Filter, Download, ChevronDown, Table as TableIcon,
-    Trash2, AlertTriangle as AlertTriangleIcon
+import {
+    ShoppingBag, Search, Calendar, ChevronRight, User,
+    Receipt, Clock, Download, Trash2, AlertTriangle, X
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
-import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { 
-    Dialog, DialogContent, DialogHeader, 
-    DialogTitle, DialogDescription 
-} from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { toast } from 'sonner';
 
 interface HistoricalOrder {
@@ -27,6 +20,16 @@ interface HistoricalOrder {
     order_items: any[];
 }
 
+const calcTotal = (order: HistoricalOrder) =>
+    order.total_amount ?? order.order_items.reduce((s, i) => s + Number(i.price) * i.quantity, 0);
+
+const formatDuration = (start: string, end: string | null) => {
+    if (!end) return '—';
+    const ms = new Date(end).getTime() - new Date(start).getTime();
+    const m = Math.floor(ms / 60000);
+    return `${m}min`;
+};
+
 export function AdminHistory() {
     const { slug } = useParams();
     const [orders, setOrders] = useState<HistoricalOrder[]>([]);
@@ -38,360 +41,247 @@ export function AdminHistory() {
     const [cleanupDays, setCleanupDays] = useState<number | 'all'>(30);
 
     const fetchHistory = async () => {
+        setLoading(true);
         try {
-            setLoading(true);
-            const { data: est } = await supabase
-                .from('establishments')
-                .select('id')
-                .eq('slug', slug)
-                .single();
-            
+            const { data: est } = await supabase.from('establishments').select('id').eq('slug', slug).single();
             if (!est) return;
             setEstablishmentId(est.id);
-
             const { data, error } = await supabase
-                .from('orders')
-                .select('*, order_items(*, menu_items(*))')
+                .from('orders').select('*, order_items(*, menu_items(*))')
                 .eq('establishment_id', est.id)
                 .in('status', ['completed', 'archived'])
-                .order('created_at', { ascending: false })
-                .limit(100);
-
+                .order('created_at', { ascending: false }).limit(100);
             if (error) throw error;
             setOrders(data || []);
-        } catch (err) {
-            console.error("Error fetching history:", err);
-            toast.error("Erro ao carregar histórico.");
-        } finally {
-            setLoading(false);
-        }
+        } catch { toast.error('Erro ao carregar histórico.'); }
+        finally { setLoading(false); }
     };
 
-    useEffect(() => {
-        fetchHistory();
-    }, [slug]);
+    useEffect(() => { fetchHistory(); }, [slug]);
 
     const handleCleanup = async () => {
         if (!establishmentId) return;
-        
+        setLoading(true);
         try {
-            setLoading(true);
-            // 1. Fetch IDs of orders to be deleted
-            let selectQuery = supabase
-                .from('orders')
-                .select('id')
-                .eq('establishment_id', establishmentId)
-                .in('status', ['completed', 'archived']);
-
+            let q = supabase.from('orders').select('id').eq('establishment_id', establishmentId).in('status', ['completed', 'archived']);
             if (cleanupDays !== 'all') {
-                const cutoffDate = new Date();
-                cutoffDate.setDate(cutoffDate.getDate() - (cleanupDays as number));
-                selectQuery = selectQuery.lt('created_at', cutoffDate.toISOString());
+                const cut = new Date(); cut.setDate(cut.getDate() - (cleanupDays as number));
+                q = q.lt('created_at', cut.toISOString());
             }
-
-            const { data: ordersToClean, error: selectError } = await selectQuery;
-            if (selectError) throw selectError;
-
-            if (ordersToClean && ordersToClean.length > 0) {
-                const orderIds = ordersToClean.map(o => o.id);
-
-                // 2. Manual delete associated items (failsafe if cascade is missing)
-                const { error: itemsError } = await supabase
-                    .from('order_items')
-                    .delete()
-                    .in('order_id', orderIds);
-                
-                if (itemsError) throw itemsError;
-
-                // 3. Delete the orders
-                const { error: ordersError } = await supabase
-                    .from('orders')
-                    .delete()
-                    .in('id', orderIds);
-
-                if (ordersError) throw ordersError;
+            const { data: toClean } = await q;
+            if (toClean?.length) {
+                const ids = toClean.map(o => o.id);
+                await supabase.from('order_items').delete().in('order_id', ids);
+                await supabase.from('orders').delete().in('id', ids);
             }
-
-            toast.success("Histórico limpo com sucesso!");
+            toast.success('Histórico limpo!');
             setIsCleanupOpen(false);
             fetchHistory();
-        } catch (err: any) {
-            console.error("Error cleaning up:", err);
-            toast.error(`Erro ao limpar: ${err.message || 'Erro desconhecido'}`);
-        } finally {
-            setLoading(false);
-        }
+        } catch (e: any) { toast.error(e.message); }
+        finally { setLoading(false); }
     };
 
-    const calculateOrderTotal = (order: HistoricalOrder) => {
-        if (order.total_amount !== null && order.total_amount !== undefined) return order.total_amount;
-        return order.order_items.reduce((sum, item) => sum + (Number(item.price) * item.quantity), 0);
-    };
-
-    const filteredOrders = orders.filter(o => 
-        o.table_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    // Group by date
+    const filtered = orders.filter(o =>
+        o.table_id?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         o.customer_name?.toLowerCase().includes(searchQuery.toLowerCase())
     );
 
+    const grouped = filtered.reduce((acc, order) => {
+        const date = new Date(order.created_at).toLocaleDateString('pt-BR', { weekday: 'long', day: '2-digit', month: 'long' });
+        if (!acc[date]) acc[date] = [];
+        acc[date].push(order);
+        return acc;
+    }, {} as Record<string, HistoricalOrder[]>);
+
+    const dayTotal = (orders: HistoricalOrder[]) => orders.reduce((s, o) => s + calcTotal(o), 0);
+
     return (
-        <div className="space-y-8 animate-in fade-in duration-500 max-w-7xl mx-auto pb-12">
+        <div className="space-y-6 animate-in fade-in duration-500 max-w-5xl">
             {/* Header */}
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h1 className="text-4xl font-black tracking-tighter bg-gradient-to-r from-foreground to-foreground/60 bg-clip-text text-transparent">
-                        Histórico de Comandas
-                    </h1>
-                    <p className="text-muted-foreground mt-2 text-lg font-medium opacity-70">
-                        Consulte registros de mesas e atendimentos finalizados.
-                    </p>
+                    <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Histórico</h1>
+                    <p className="text-zinc-400 text-sm mt-0.5">Comandas e atendimentos finalizados.</p>
                 </div>
-                <div className="flex gap-3">
-                    <Button 
-                        variant="outline" 
-                        className="rounded-2xl gap-2 font-bold bg-white shadow-sm text-red-500 hover:bg-red-50 hover:text-red-600 border-red-100"
-                        onClick={() => setIsCleanupOpen(true)}
-                    >
-                        <Trash2 className="w-5 h-5" /> Limpar Histórico
-                    </Button>
-                    <Button variant="outline" className="rounded-2xl gap-2 font-bold bg-white shadow-sm">
-                        <Download className="w-5 h-5" /> Exportar CSV
-                    </Button>
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setIsCleanupOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-red-100 text-red-500 text-sm font-semibold hover:bg-red-50 transition-colors">
+                        <Trash2 className="w-4 h-4" /> Limpar
+                    </button>
+                    <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-zinc-200 text-zinc-500 text-sm font-semibold hover:bg-zinc-50 transition-colors">
+                        <Download className="w-4 h-4" /> Exportar
+                    </button>
                 </div>
             </div>
 
-            {/* Filters Bar */}
-            <div className="bg-white/50 backdrop-blur-xl p-4 rounded-[2.5rem] border border-border/40 shadow-premium flex flex-col md:flex-row gap-4 items-center">
-                <div className="relative flex-1 w-full">
-                    <Search className="absolute left-5 top-1/2 -translate-y-1/2 w-5 h-5 text-muted-foreground/50" />
-                    <Input 
-                        placeholder="Buscar por mesa ou cliente..." 
-                        className="pl-14 h-14 rounded-full border-none bg-secondary/30 focus-visible:ring-primary/20 font-medium"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-                <Button variant="secondary" className="h-14 rounded-full px-8 font-black uppercase tracking-widest gap-2 bg-secondary/50">
-                    <Calendar className="w-5 h-5" /> Hoje
-                    <ChevronDown className="w-4 h-4 opacity-50" />
-                </Button>
-                <Button variant="secondary" className="h-14 rounded-full px-8 font-black uppercase tracking-widest gap-2 bg-secondary/50">
-                    <Filter className="w-5 h-5" /> Filtros
-                </Button>
+            {/* Search */}
+            <div className="relative max-w-sm">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-300" />
+                <Input value={searchQuery} onChange={e => setSearchQuery(e.target.value)}
+                    placeholder="Buscar por mesa ou cliente…"
+                    className="pl-9 h-10 rounded-xl border-zinc-200 text-sm" />
             </div>
 
-            {/* Orders List */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {loading ? (
-                    [...Array(6)].map((_, i) => (
-                        <div key={i} className="h-48 rounded-[2.5rem] bg-secondary/20 animate-pulse border border-border/20" />
-                    ))
-                ) : filteredOrders.length > 0 ? (
-                    filteredOrders.map((order) => (
-                        <div 
-                            key={order.id}
-                            onClick={() => setSelectedOrder(order)}
-                            className="group bg-white p-6 rounded-[2.5rem] shadow-premium border border-border/40 hover:shadow-premium-hover hover:-translate-y-1 transition-premium cursor-pointer relative overflow-hidden active:scale-95"
-                        >
-                            <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 group-hover:bg-primary/10 transition-colors" />
-                            
-                            <div className="flex justify-between items-start mb-6 relative z-10">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-8 h-8 rounded-xl bg-primary/10 flex items-center justify-center text-primary">
-                                            <TableIcon className="w-4 h-4" />
+            {/* Orders grouped by day */}
+            {loading ? (
+                <div className="space-y-4">
+                    {[...Array(3)].map((_, i) => <div key={i} className="h-32 rounded-2xl bg-zinc-100 animate-pulse" />)}
+                </div>
+            ) : Object.keys(grouped).length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 border-2 border-dashed border-zinc-200 rounded-2xl text-zinc-400">
+                    <ShoppingBag className="w-10 h-10 mb-3 opacity-30" />
+                    <p className="font-semibold text-sm">Nenhum registro encontrado</p>
+                </div>
+            ) : (
+                <div className="space-y-8">
+                    {Object.entries(grouped).map(([date, dayOrders]) => (
+                        <div key={date}>
+                            {/* Day Header */}
+                            <div className="flex items-center justify-between mb-3">
+                                <div className="flex items-center gap-2">
+                                    <Calendar className="w-4 h-4 text-zinc-400" />
+                                    <h3 className="text-sm font-bold text-zinc-900 capitalize">{date}</h3>
+                                    <span className="text-xs text-zinc-400 font-medium">({dayOrders.length} comanda{dayOrders.length > 1 ? 's' : ''})</span>
+                                </div>
+                                <div className="text-sm font-bold text-emerald-600 bg-emerald-50 px-3 py-1 rounded-lg border border-emerald-100">
+                                    R$ {dayTotal(dayOrders).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                                </div>
+                            </div>
+
+                            {/* Orders list */}
+                            <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm divide-y divide-zinc-50 overflow-hidden">
+                                {dayOrders.map(order => (
+                                    <button
+                                        key={order.id}
+                                        onClick={() => setSelectedOrder(order)}
+                                        className="w-full flex items-center gap-4 px-5 py-4 hover:bg-zinc-50 transition-colors text-left group"
+                                    >
+                                        <div className="w-9 h-9 rounded-xl bg-zinc-100 flex items-center justify-center shrink-0 group-hover:bg-zinc-900 transition-colors">
+                                            <Receipt className="w-4 h-4 text-zinc-400 group-hover:text-white transition-colors" />
                                         </div>
-                                        <span className="text-2xl font-black tracking-tighter">Mesa {order.table_id}</span>
-                                    </div>
-                                    <div className="flex items-center gap-2 text-xs text-muted-foreground font-bold uppercase tracking-widest">
-                                        <Clock className="w-3 h-3" />
-                                        {new Date(order.created_at).toLocaleDateString('pt-BR')} às {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
-                                    </div>
-                                </div>
-                                <div className="bg-emerald-50 text-emerald-600 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest border border-emerald-100 flex items-center gap-1">
-                                    Finalizada
-                                </div>
-                            </div>
-
-                            <div className="flex items-center gap-3 mb-6 relative z-10">
-                                <div className="w-10 h-10 rounded-full bg-secondary/50 flex items-center justify-center">
-                                    <User className="w-5 h-5 text-muted-foreground" />
-                                </div>
-                                <div className="flex flex-col">
-                                    <span className="text-xs font-black text-muted-foreground uppercase tracking-widest leading-none mb-1">Cliente</span>
-                                    <span className="font-bold text-sm tracking-tight">{order.customer_name || 'Consumidor'}</span>
-                                </div>
-                            </div>
-
-                            <div className="pt-4 border-t border-border/40 flex justify-between items-end relative z-10">
-                                <div className="flex flex-col">
-                                    <span className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em] mb-1 opacity-50">Total Fechado</span>
-                                    <span className="text-2xl font-black text-primary tracking-tighter">
-                                        R$ {calculateOrderTotal(order).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                                    </span>
-                                </div>
-                                <div className="w-12 h-12 rounded-2xl bg-secondary flex items-center justify-center group-hover:bg-primary transition-colors">
-                                    <ChevronRight className="w-6 h-6 text-muted-foreground group-hover:text-white transition-colors" />
-                                </div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="flex items-center gap-2">
+                                                <span className="font-bold text-zinc-900 text-sm">Mesa {order.table_id}</span>
+                                                <span className="hidden sm:inline text-[10px] font-bold text-zinc-400 bg-zinc-100 px-2 py-0.5 rounded-full">
+                                                    {formatDuration(order.created_at, order.completed_at)}
+                                                </span>
+                                            </div>
+                                            <div className="flex items-center gap-3 mt-0.5">
+                                                <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                                                    <Clock className="w-3 h-3" />
+                                                    {new Date(order.created_at).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
+                                                </div>
+                                                {order.customer_name && (
+                                                    <div className="flex items-center gap-1 text-[11px] text-zinc-400">
+                                                        <User className="w-3 h-3" /> {order.customer_name}
+                                                    </div>
+                                                )}
+                                                <span className="text-[10px] font-bold text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100">
+                                                    {order.order_items.length} item{order.order_items.length > 1 ? 's' : ''}
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div className="text-right shrink-0">
+                                            <p className="font-bold text-zinc-900 text-sm">R$ {calcTotal(order).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                        </div>
+                                        <ChevronRight className="w-4 h-4 text-zinc-300 group-hover:text-zinc-600 transition-colors shrink-0" />
+                                    </button>
+                                ))}
                             </div>
                         </div>
-                    ))
-                ) : (
-                    <div className="col-span-full py-32 flex flex-col items-center justify-center text-muted-foreground space-y-4 bg-secondary/10 rounded-[3rem] border-2 border-dashed border-border/40">
-                        <ShoppingBag className="w-16 h-16 opacity-10" />
-                        <p className="text-lg font-bold opacity-40 italic">Nenhum registro encontrado.</p>
-                    </div>
-                )}
-            </div>
+                    ))}
+                </div>
+            )}
 
             {/* Order Detail Modal */}
             <Dialog open={!!selectedOrder} onOpenChange={() => setSelectedOrder(null)}>
-                <DialogContent className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 max-w-xl w-[95%] rounded-[3rem] p-0 border-none shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar z-50 bg-white">
+                <DialogContent className="max-w-lg rounded-2xl p-0 overflow-hidden border-none shadow-2xl">
                     {selectedOrder && (
-                        <div className="flex flex-col h-full bg-white">
-                            <div className="p-8 bg-gradient-to-br from-zinc-900 to-black text-white relative">
-                                <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[80px] -translate-y-1/2 translate-x-1/2" />
-                                
-                                <DialogHeader className="relative z-10">
-                                    <div className="flex items-center gap-4 mb-4">
-                                        <div className="w-16 h-16 rounded-[1.5rem] bg-white/10 backdrop-blur-md flex items-center justify-center text-primary ring-1 ring-white/20">
-                                            <TableIcon className="w-8 h-8" />
-                                        </div>
-                                        <div>
-                                            <DialogTitle className="text-3xl font-black tracking-tighter">Mesa {selectedOrder.table_id}</DialogTitle>
-                                            <DialogDescription className="text-white/60 font-bold uppercase text-[10px] tracking-[0.2em] flex items-center gap-2">
-                                                <Clock className="w-3.5 h-3.5" />
-                                                {new Date(selectedOrder.created_at).toLocaleString('pt-BR')} 
-                                            </DialogDescription>
-                                        </div>
+                        <>
+                            {/* Modal Header */}
+                            <div className="bg-zinc-900 text-white px-8 py-6 relative">
+                                <button onClick={() => setSelectedOrder(null)} className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-zinc-800 text-zinc-400 hover:text-white transition-colors">
+                                    <X className="w-4 h-4" />
+                                </button>
+                                <DialogTitle className="text-2xl font-black tracking-tight">Mesa {selectedOrder.table_id}</DialogTitle>
+                                <DialogDescription className="text-zinc-400 text-sm mt-1 flex items-center gap-2">
+                                    <Clock className="w-3.5 h-3.5" />
+                                    {new Date(selectedOrder.created_at).toLocaleString('pt-BR')}
+                                </DialogDescription>
+                                <div className="grid grid-cols-2 gap-3 mt-4">
+                                    <div className="bg-zinc-800 rounded-xl px-3 py-2.5">
+                                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-0.5">Cliente</p>
+                                        <p className="text-sm font-bold text-zinc-100">{selectedOrder.customer_name || '—'}</p>
                                     </div>
-                                </DialogHeader>
-                            </div>
-
-                            <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-8">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="p-5 rounded-[1.8rem] bg-secondary/30 border border-border/40">
-                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-2 opacity-60">Cliente</span>
-                                        <span className="font-black text-foreground uppercase italic">{selectedOrder.customer_name || 'N/A'}</span>
-                                    </div>
-                                    <div className="p-5 rounded-[1.8rem] bg-secondary/30 border border-border/40">
-                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest block mb-2 opacity-60">Status PGTO</span>
-                                        <span className="font-black text-emerald-600 uppercase italic">Confirmado</span>
-                                    </div>
-                                </div>
-
-                                <div>
-                                    <h4 className="text-xs font-black text-muted-foreground uppercase tracking-[0.2em] mb-6 flex items-center gap-3">
-                                        <Receipt className="w-4 h-4 text-primary" /> 
-                                        Itens Consumidos
-                                        <div className="h-px bg-border/40 flex-1"></div>
-                                    </h4>
-                                    
-                                    <div className="space-y-4">
-                                        {selectedOrder.order_items.map((item, idx) => (
-                                            <div key={idx} className="flex items-center justify-between p-4 rounded-2xl bg-secondary/10 border border-border/20 group hover:bg-secondary/20 transition-colors">
-                                                <div className="flex items-center gap-4">
-                                                    <div className="w-10 h-10 rounded-xl bg-white shadow-sm border border-border flex items-center justify-center font-black text-sm text-foreground">
-                                                        {item.quantity}x
-                                                    </div>
-                                                    <div className="flex flex-col">
-                                                        <span className="font-bold text-sm tracking-tight text-foreground">{item.menu_items?.name}</span>
-                                                        <span className="text-[10px] font-black text-muted-foreground uppercase tracking-widest opacity-60">
-                                                            {item.menu_items?.is_rodizio ? 'Rodízio' : 'À La Carte'}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                                <span className="font-mono font-bold text-sm text-muted-foreground">
-                                                    R$ {(Number(item.price) * item.quantity).toFixed(2)}
-                                                </span>
-                                            </div>
-                                        ))}
+                                    <div className="bg-zinc-800 rounded-xl px-3 py-2.5">
+                                        <p className="text-[9px] font-bold text-zinc-500 uppercase tracking-widest mb-0.5">Duração</p>
+                                        <p className="text-sm font-bold text-zinc-100">{formatDuration(selectedOrder.created_at, selectedOrder.completed_at)}</p>
                                     </div>
                                 </div>
                             </div>
 
-                            <div className="p-8 border-t border-border/40 bg-zinc-50">
-                                <div className="flex justify-between items-end">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-black text-muted-foreground uppercase tracking-[0.3em] mb-1">Valor Final da Comanda</span>
-                                        <span className="text-4xl font-black text-primary tracking-tighter leading-none">
-                                            R$ {calculateOrderTotal(selectedOrder).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            {/* Items */}
+                            <div className="p-6 max-h-80 overflow-y-auto space-y-2">
+                                <h4 className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest mb-3 flex items-center gap-2">
+                                    <Receipt className="w-3.5 h-3.5" /> Itens Consumidos
+                                </h4>
+                                {selectedOrder.order_items.map((item, idx) => (
+                                    <div key={idx} className="flex items-center gap-3 p-3 rounded-xl bg-zinc-50 border border-zinc-100">
+                                        <div className="w-8 h-8 rounded-lg bg-zinc-200 flex items-center justify-center text-xs font-black text-zinc-700 shrink-0">
+                                            {item.quantity}×
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-bold text-zinc-800 truncate">{item.menu_items?.name}</p>
+                                            <p className="text-[10px] text-zinc-400 font-medium">{item.menu_items?.is_rodizio ? 'Rodízio' : 'À La Carte'}</p>
+                                        </div>
+                                        <span className="font-bold text-sm text-zinc-700 shrink-0">
+                                            R$ {(Number(item.price) * item.quantity).toFixed(2)}
                                         </span>
                                     </div>
-                                    <Button 
-                                        className="h-14 px-8 rounded-full font-black uppercase tracking-widest scale-105 shadow-xl shadow-primary/20"
-                                        onClick={() => setSelectedOrder(null)}
-                                    >
-                                        Fechar
-                                    </Button>
-                                </div>
+                                ))}
                             </div>
-                        </div>
+
+                            {/* Footer */}
+                            <div className="px-6 py-4 bg-zinc-50 border-t border-zinc-100 flex items-center justify-between">
+                                <div>
+                                    <p className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Total da Comanda</p>
+                                    <p className="text-2xl font-black text-zinc-900">R$ {calcTotal(selectedOrder).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}</p>
+                                </div>
+                                <span className="px-3 py-1.5 bg-emerald-50 text-emerald-600 text-xs font-black rounded-lg border border-emerald-100 uppercase tracking-wider">Finalizada</span>
+                            </div>
+                        </>
                     )}
                 </DialogContent>
             </Dialog>
 
             {/* Cleanup Dialog */}
             <Dialog open={isCleanupOpen} onOpenChange={setIsCleanupOpen}>
-                <DialogContent className="fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 max-w-md w-[95%] rounded-[2.5rem] p-8 border-none shadow-2xl overflow-y-auto max-h-[90vh] no-scrollbar z-50 bg-white">
-                    <div className="absolute top-0 right-0 w-32 h-32 bg-red-500/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2" />
-                    
-                    <DialogHeader className="mb-6">
-                        <div className="w-14 h-14 rounded-2xl bg-red-100 flex items-center justify-center text-red-600 mb-4 shadow-sm">
-                            <Trash2 className="w-7 h-7" />
-                        </div>
-                        <DialogTitle className="text-2xl font-black tracking-tighter">Limpar Histórico</DialogTitle>
-                        <DialogDescription className="text-sm font-medium">
-                            Selecione o período de pedidos finalizados que deseja remover permanentemente.
-                        </DialogDescription>
-                    </DialogHeader>
+                <DialogContent className="max-w-sm rounded-2xl p-6">
+                    <div className="w-12 h-12 rounded-xl bg-red-100 flex items-center justify-center mb-4">
+                        <Trash2 className="w-6 h-6 text-red-500" />
+                    </div>
+                    <DialogTitle className="text-xl font-bold text-zinc-900 mb-1">Limpar Histórico</DialogTitle>
+                    <DialogDescription className="text-zinc-400 text-sm mb-5">Selecione o período a remover permanentemente.</DialogDescription>
 
-                    <div className="space-y-3 mb-8">
-                        {[
-                            { label: 'Há mais de 24 horas', value: 1 },
-                            { label: 'Há mais de 7 dias', value: 7 },
-                            { label: 'Há mais de 30 dias', value: 30 },
-                            { label: 'Todo o histórico', value: 'all' }
-                        ].map((opt) => (
-                            <button
-                                key={opt.value}
-                                onClick={() => setCleanupDays(opt.value as any)}
-                                className={`w-full p-4 rounded-2xl border text-left flex items-center justify-between transition-all duration-300 ${
-                                    cleanupDays === opt.value
-                                        ? 'bg-red-50 border-red-200 ring-2 ring-red-500/10'
-                                        : 'bg-secondary/20 border-border/40 hover:bg-secondary/40'
-                                }`}
-                            >
-                                <span className={`font-bold ${cleanupDays === opt.value ? 'text-red-700' : 'text-foreground'}`}>
-                                    {opt.label}
-                                </span>
-                                {cleanupDays === opt.value && (
-                                    <div className="w-2 h-2 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]" />
-                                )}
+                    <div className="space-y-2 mb-5">
+                        {[{ label: 'Há mais de 24 horas', value: 1 }, { label: 'Há mais de 7 dias', value: 7 }, { label: 'Há mais de 30 dias', value: 30 }, { label: 'Todo o histórico', value: 'all' }].map(opt => (
+                            <button key={opt.value} onClick={() => setCleanupDays(opt.value as any)}
+                                className={`w-full p-3.5 rounded-xl border text-sm font-semibold text-left transition-all flex items-center justify-between ${cleanupDays === opt.value ? 'bg-red-50 border-red-200 text-red-700' : 'bg-zinc-50 border-zinc-200 text-zinc-700 hover:border-zinc-300'}`}>
+                                {opt.label}
+                                {cleanupDays === opt.value && <div className="w-1.5 h-1.5 rounded-full bg-red-500" />}
                             </button>
                         ))}
                     </div>
 
-                    <div className="flex bg-amber-50 rounded-2xl p-4 border border-amber-100 gap-3 mb-8">
-                        <AlertTriangleIcon className="w-5 h-5 text-amber-600 shrink-0" />
-                        <p className="text-[11px] font-bold text-amber-700 leading-tight italic uppercase tracking-wider">
-                            Essa ação não pode ser desfeita. Certifique-se de que não precisará mais destes registros.
-                        </p>
+                    <div className="bg-amber-50 rounded-xl p-3 border border-amber-100 flex gap-2.5 mb-5">
+                        <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+                        <p className="text-xs text-amber-700 font-semibold leading-relaxed">Esta ação é irreversível. Certifique-se de que não precisa mais destes registros.</p>
                     </div>
 
-                    <div className="flex gap-4">
-                        <Button 
-                            variant="outline" 
-                            className="flex-1 h-14 rounded-2xl font-black uppercase tracking-widest text-[11px]"
-                            onClick={() => setIsCleanupOpen(false)}
-                        >
-                            Cancelar
-                        </Button>
-                        <Button 
-                            className="flex-1 h-14 rounded-2xl bg-red-600 hover:bg-red-700 font-black uppercase tracking-widest text-[11px] shadow-lg shadow-red-500/20"
-                            onClick={handleCleanup}
-                        >
-                            Limpar Agora
-                        </Button>
+                    <div className="flex gap-3">
+                        <button onClick={() => setIsCleanupOpen(false)} className="flex-1 h-11 rounded-xl border border-zinc-200 text-sm font-semibold text-zinc-600 hover:bg-zinc-50 transition-colors">Cancelar</button>
+                        <button onClick={handleCleanup} className="flex-1 h-11 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors active:scale-95">Limpar Agora</button>
                     </div>
                 </DialogContent>
             </Dialog>

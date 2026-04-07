@@ -1,28 +1,34 @@
 import { useState } from 'react';
-import { useMenu } from '@/contexts/MenuContext';
+import { useMenu, Category } from '@/contexts/MenuContext';
 import { MenuItem } from '@/contexts/OrderContext';
-import { Plus, Edit2, Trash2, Search, X, Check, Image as ImageIcon } from 'lucide-react';
+import { Plus, Edit2, Trash2, Search, X, Check, Image as ImageIcon, LayoutGrid, Tag } from 'lucide-react';
 import { toast } from 'sonner';
 
+type ActiveTab = 'items' | 'categories';
+
 export function AdminMenu() {
-    const { items, categories, alacarteCategories, addItem, updateItem, deleteItem, isLoading } = useMenu();
+    const { items, categories, alacarteCategories, addItem, updateItem, deleteItem, addCategory, updateCategory, deleteCategory, isLoading } = useMenu();
     const allCategories = [...categories, ...alacarteCategories].filter((v, i, a) => a.findIndex(t => (t.id === v.id)) === i);
+
+    const [activeTab, setActiveTab] = useState<ActiveTab>('items');
+
+    // Item list state
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [isItemModalOpen, setIsItemModalOpen] = useState(false);
     const [editingItem, setEditingItem] = useState<MenuItem | null>(null);
-
-    // Form State
     const [formData, setFormData] = useState<Partial<MenuItem>>({
-        name: '',
-        description: '',
-        price: 0,
-        image: '',
+        name: '', description: '', price: 0, image: '',
         category: allCategories[0]?.id || '',
-        isRodizio: true,
-        station: 'kitchen'
+        isRodizio: true, station: 'kitchen'
     });
 
+    // Category list state
+    const [isCatModalOpen, setIsCatModalOpen] = useState(false);
+    const [editingCategory, setEditingCategory] = useState<Category | null>(null);
+    const [catFormData, setCatFormData] = useState({ name: '', icon: '🍱', type: 'rodizio' });
+
+    // ─── Item Handlers ────────────────────────────────────────────────
     const filteredItems = items.filter(item => {
         const matchesSearch = item.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
             item.code.toLowerCase().includes(searchTerm.toLowerCase());
@@ -30,69 +36,84 @@ export function AdminMenu() {
         return matchesSearch && matchesCategory;
     });
 
-    const handleEdit = (item: MenuItem) => {
+    const handleEditItem = (item: MenuItem) => {
         setEditingItem(item);
         setFormData(item);
-        setIsModalOpen(true);
+        setIsItemModalOpen(true);
     };
 
-    const handleDelete = (id: string, name: string) => {
+    const handleDeleteItem = (id: string, name: string) => {
         if (confirm(`Tem certeza que deseja excluir "${name}"?`)) {
             deleteItem(id);
             toast.success('Item excluído com sucesso');
         }
     };
 
-    const handleAddNew = () => {
+    const handleAddNewItem = () => {
         setEditingItem(null);
         setFormData({
-            name: '',
-            description: '',
-            price: 0,
-            image: '',
+            name: '', description: '', price: 0, image: '',
             category: allCategories[0]?.id || '',
-            isRodizio: true,
-            station: 'kitchen',
+            isRodizio: true, station: 'kitchen',
             code: `P${Math.floor(Math.random() * 1000)}`
         });
-        setIsModalOpen(true);
+        setIsItemModalOpen(true);
     };
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const handleSubmitItem = (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!formData.name || !formData.price || !formData.category) {
             toast.error('Preencha os campos obrigatórios');
             return;
         }
-
         if (editingItem) {
             updateItem(editingItem.id, formData);
             toast.success('Item atualizado com sucesso');
         } else {
-            // @ts-ignore - ID is generated in context
+            // @ts-ignore
             addItem(formData);
             toast.success('Item criado com sucesso');
         }
-        setIsModalOpen(false);
+        setIsItemModalOpen(false);
     };
 
+    // ─── Category Handlers ────────────────────────────────────────────
+    const allCats = [...categories, ...alacarteCategories].filter(cat => !cat.name?.toUpperCase().includes('SISTEMA'));
 
-    // Loading State
+    const handleSaveCategory = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!catFormData.name) return toast.error('Nome é obrigatório');
+        try {
+            if (editingCategory) {
+                await updateCategory(editingCategory.dbId || editingCategory.id, catFormData);
+                toast.success('Categoria atualizada');
+            } else {
+                await addCategory(catFormData);
+                toast.success('Categoria criada');
+            }
+            setIsCatModalOpen(false);
+            setEditingCategory(null);
+            setCatFormData({ name: '', icon: '🍱', type: 'rodizio' });
+        } catch {
+            toast.error('Erro ao salvar categoria');
+        }
+    };
+
+    const handleEditCategory = (cat: Category) => {
+        setEditingCategory(cat);
+        setCatFormData({ name: cat.name, icon: cat.icon, type: (cat as any).type || 'rodizio' });
+        setIsCatModalOpen(true);
+    };
+
+    // ─── Loading ──────────────────────────────────────────────────────
     if (isLoading) {
         return (
             <div className="space-y-8 animate-in fade-in duration-500">
-                <div className="flex justify-between items-center">
-                    <div className="space-y-2">
-                        <div className="h-8 w-48 bg-gray-200 rounded-lg animate-pulse" />
-                        <div className="h-4 w-64 bg-gray-100 rounded-lg animate-pulse" />
-                    </div>
-                    <div className="h-12 w-32 bg-gray-200 rounded-2xl animate-pulse" />
-                </div>
-                <div className="h-14 w-full bg-gray-100 rounded-2xl animate-pulse" />
+                <div className="h-8 w-48 bg-zinc-100 rounded-lg animate-pulse" />
+                <div className="h-14 w-full bg-zinc-50 rounded-2xl animate-pulse" />
                 <div className="space-y-4">
                     {[1, 2, 3].map(i => (
-                        <div key={i} className="h-24 w-full bg-gray-50 rounded-3xl animate-pulse border border-gray-100" />
+                        <div key={i} className="h-20 w-full bg-zinc-50 rounded-2xl animate-pulse border border-zinc-100" />
                     ))}
                 </div>
             </div>
@@ -100,191 +121,261 @@ export function AdminMenu() {
     }
 
     return (
-        <div className="space-y-8 animate-in fade-in duration-500">
-            <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
+        <div className="space-y-6 animate-in fade-in duration-500">
+            {/* Page Header */}
+            <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-3xl font-bold tracking-tight text-foreground">Gerenciar Cardápio</h2>
-                    <p className="text-muted-foreground mt-1 text-lg">Adicione, edite ou remova itens do menu.</p>
+                    <h1 className="text-2xl font-bold tracking-tight text-zinc-900">Cardápio</h1>
+                    <p className="text-zinc-500 text-sm mt-0.5">Gerencie itens e categorias do seu menu.</p>
                 </div>
                 <button
-                    onClick={handleAddNew}
-                    className="flex items-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-bold shadow-lg shadow-primary/25 hover:shadow-primary/40 hover:-translate-y-0.5 transition-all duration-300"
+                    onClick={activeTab === 'items' ? handleAddNewItem : () => {
+                        setEditingCategory(null);
+                        setCatFormData({ name: '', icon: '🍱', type: 'rodizio' });
+                        setIsCatModalOpen(true);
+                    }}
+                    className="flex items-center gap-2 bg-zinc-900 text-white px-5 py-2.5 rounded-xl font-semibold text-sm hover:bg-zinc-800 transition-all duration-200 shadow-sm active:scale-95"
                 >
-                    <Plus className="w-5 h-5" />
-                    Novo Item
+                    <Plus className="w-4 h-4" />
+                    {activeTab === 'items' ? 'Novo Item' : 'Nova Categoria'}
                 </button>
             </div>
 
-            {/* Filters */}
-            <div className="flex flex-col sm:flex-row gap-4">
-                <div className="relative flex-1 group">
-                    <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-muted-foreground/60 w-5 h-5 group-focus-within:text-primary transition-colors" />
-                    <input
-                        type="text"
-                        placeholder="Buscar por nome ou código..."
-                        className="w-full pl-12 pr-4 py-4 rounded-2xl border border-border/60 bg-card shadow-sm focus:ring-2 focus:ring-primary/10 focus:border-primary/50 outline-none transition-all placeholder:text-muted-foreground/50"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-                <div className="relative">
-                    <select
-                        className="w-full sm:w-64 px-4 py-4 rounded-2xl border border-border/60 bg-card shadow-sm outline-none focus:ring-2 focus:ring-primary/10 focus:border-primary/50 cursor-pointer appearance-none transition-all font-medium text-foreground/80"
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
+            {/* Tab Bar */}
+            <div className="flex gap-0 border-b border-zinc-200">
+                {([
+                    { id: 'items', label: 'Itens do Cardápio', icon: Tag },
+                    { id: 'categories', label: 'Categorias', icon: LayoutGrid },
+                ] as { id: ActiveTab; label: string; icon: React.ElementType }[]).map(tab => (
+                    <button
+                        key={tab.id}
+                        onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center gap-2 px-5 py-3 text-sm font-semibold border-b-2 transition-all -mb-px ${activeTab === tab.id
+                            ? 'border-zinc-900 text-zinc-900'
+                            : 'border-transparent text-zinc-400 hover:text-zinc-600'
+                        }`}
                     >
-                        <option value="all">Todas as Categorias</option>
-                        {allCategories.map(cat => (
-                            <option key={cat.id} value={cat.id}>{cat.name}</option>
-                        ))}
-                    </select>
-                    <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground/60">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" /></svg>
+                        <tab.icon className="w-4 h-4" />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
+
+            {/* ──────────────── ITEMS TAB ──────────────── */}
+            {activeTab === 'items' && (
+                <div className="space-y-5">
+                    {/* Filters */}
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                            <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 text-zinc-400 w-4 h-4" />
+                            <input
+                                type="text"
+                                placeholder="Buscar por nome ou código..."
+                                className="w-full pl-10 pr-4 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all placeholder:text-zinc-400"
+                                value={searchTerm}
+                                onChange={(e) => setSearchTerm(e.target.value)}
+                            />
+                        </div>
+                        <select
+                            className="w-full sm:w-56 px-3.5 py-2.5 rounded-xl border border-zinc-200 bg-white text-sm outline-none focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 cursor-pointer appearance-none text-zinc-700"
+                            value={selectedCategory}
+                            onChange={(e) => setSelectedCategory(e.target.value)}
+                        >
+                            <option value="all">Todas as Categorias</option>
+                            {allCategories.map(cat => (
+                                <option key={cat.id} value={cat.id}>{cat.name}</option>
+                            ))}
+                        </select>
+                    </div>
+
+                    {/* Items Table */}
+                    <div className="bg-white rounded-2xl border border-zinc-100 shadow-sm overflow-hidden">
+                        <table className="w-full text-left border-collapse">
+                            <thead className="bg-zinc-50 border-b border-zinc-100">
+                                <tr>
+                                    <th className="px-6 py-4 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Produto</th>
+                                    <th className="px-6 py-4 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Categoria</th>
+                                    <th className="px-6 py-4 text-[11px] font-bold text-zinc-400 uppercase tracking-wider">Preço</th>
+                                    <th className="px-6 py-4 text-[11px] font-bold text-zinc-400 uppercase tracking-wider text-center">Rodízio</th>
+                                    <th className="px-6 py-4 text-[11px] font-bold text-zinc-400 uppercase tracking-wider text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-zinc-50">
+                                {filteredItems.map(item => (
+                                    <tr key={item.id} className="group hover:bg-zinc-50/70 transition-colors duration-150">
+                                        <td className="px-6 py-4">
+                                            <div className="flex items-center gap-3.5">
+                                                <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center overflow-hidden shrink-0 border border-zinc-200 group-hover:border-zinc-300 transition-colors">
+                                                    {item.image
+                                                        ? <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
+                                                        : <ImageIcon className="w-5 h-5 text-zinc-300" />
+                                                    }
+                                                </div>
+                                                <div>
+                                                    <p className="font-semibold text-sm text-zinc-900">{item.name}</p>
+                                                    <p className="text-xs text-zinc-400 truncate max-w-[200px] mt-0.5">{item.description}</p>
+                                                </div>
+                                            </div>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="inline-flex px-2.5 py-1 rounded-lg bg-zinc-100 text-[11px] font-semibold text-zinc-500 border border-zinc-200">
+                                                {item.category}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            <span className="font-semibold text-sm text-emerald-700 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
+                                                R$ {item.price.toFixed(2)}
+                                            </span>
+                                        </td>
+                                        <td className="px-6 py-4 text-center">
+                                            {item.isRodizio
+                                                ? <div className="inline-flex items-center justify-center w-6 h-6 bg-zinc-900 text-white rounded-full">
+                                                    <Check className="w-3.5 h-3.5" strokeWidth={3} />
+                                                </div>
+                                                : <span className="text-zinc-300 text-lg">–</span>
+                                            }
+                                        </td>
+                                        <td className="px-6 py-4 text-right space-x-1">
+                                            <button
+                                                onClick={() => handleEditItem(item)}
+                                                className="p-2 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-all duration-150"
+                                                title="Editar"
+                                            >
+                                                <Edit2 className="w-4 h-4" />
+                                            </button>
+                                            <button
+                                                onClick={() => handleDeleteItem(item.id, item.name)}
+                                                className="p-2 hover:bg-red-50 text-zinc-400 hover:text-red-500 rounded-lg transition-all duration-150"
+                                                title="Excluir"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {filteredItems.length === 0 && (
+                            <div className="flex flex-col items-center justify-center py-16 text-zinc-400">
+                                <Search className="w-10 h-10 mb-3 opacity-20" />
+                                <p className="text-sm font-medium">Nenhum item encontrado.</p>
+                                <p className="text-xs mt-1 opacity-60">Tente outro termo ou categoria.</p>
+                            </div>
+                        )}
                     </div>
                 </div>
-            </div>
+            )}
 
-            {/* List */}
-            <div className="bg-card rounded-3xl border border-border/60 shadow-xl shadow-black/5 overflow-hidden">
-                <table className="w-full text-left border-collapse">
-                    <thead className="bg-muted/30 text-muted-foreground text-xs uppercase tracking-wider font-semibold border-b border-border/60">
-                        <tr>
-                            <th className="p-6 font-medium pl-8">Produto</th>
-                            <th className="p-6 font-medium">Categoria</th>
-                            <th className="p-6 font-medium">Preço</th>
-                            <th className="p-6 font-medium text-center">Rodízio</th>
-                            <th className="p-6 font-medium text-right pr-8">Ações</th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y divide-border/60">
-                        {filteredItems.map(item => (
-                            <tr key={item.id} className="group hover:bg-muted/30 transition-colors duration-200">
-                                <td className="p-5 pl-8">
-                                    <div className="flex items-center gap-4">
-                                        <div className="w-16 h-16 rounded-2xl bg-secondary flex items-center justify-center overflow-hidden shrink-0 border border-border/50 shadow-sm group-hover:scale-105 transition-transform duration-300">
-                                            {item.image ? (
-                                                <img src={item.image} alt={item.name} className="w-full h-full object-cover" />
-                                            ) : (
-                                                <ImageIcon className="w-7 h-7 text-muted-foreground/40" />
-                                            )}
-                                        </div>
-                                        <div>
-                                            <p className="font-bold text-base text-foreground group-hover:text-primary transition-colors">{item.name}</p>
-                                            <p className="text-sm text-muted-foreground truncate max-w-[220px] font-medium opacity-80">{item.description}</p>
-                                        </div>
-                                    </div>
-                                </td>
-                                <td className="p-5">
-                                    <span className="inline-flex px-3 py-1 rounded-lg bg-secondary text-xs font-semibold uppercase tracking-wide text-muted-foreground border border-border/50">
-                                        {item.category}
-                                    </span>
-                                </td>
-                                <td className="p-5">
-                                    <span className="font-bold text-emerald-600 bg-emerald-50 px-2.5 py-1 rounded-lg border border-emerald-100">
-                                        R$ {item.price.toFixed(2)}
-                                    </span>
-                                </td>
-                                <td className="p-5 text-center">
-                                    {item.isRodizio ? (
-                                        <div className="inline-flex items-center justify-center w-8 h-8 bg-primary/10 text-primary rounded-full shadow-sm ring-4 ring-primary/5">
-                                            <Check className="w-4 h-4" strokeWidth={3} />
-                                        </div>
-                                    ) : (
-                                        <span className="text-muted-foreground/30 font-medium text-xl">-</span>
-                                    )}
-                                </td>
-                                <td className="p-5 text-right space-x-2 pr-8">
+            {/* ──────────────── CATEGORIES TAB ──────────────── */}
+            {activeTab === 'categories' && (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    {allCats.map((cat: any) => (
+                        <div
+                            key={cat.dbId || cat.id}
+                            className="bg-white p-5 rounded-2xl border border-zinc-100 shadow-sm hover:border-zinc-300 hover:shadow-md transition-all group"
+                        >
+                            <div className="flex items-start justify-between mb-3">
+                                <div className="w-12 h-12 rounded-xl bg-zinc-50 flex items-center justify-center text-2xl border border-zinc-200">
+                                    {cat.icon}
+                                </div>
+                                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                     <button
-                                        onClick={() => handleEdit(item)}
-                                        className="p-2.5 hover:bg-blue-50 text-muted-foreground hover:text-blue-600 rounded-xl transition-all hover:scale-110 active:scale-95 duration-200"
-                                        title="Editar"
+                                        onClick={() => handleEditCategory(cat)}
+                                        className="p-1.5 hover:bg-zinc-100 text-zinc-400 hover:text-zinc-700 rounded-lg transition-colors"
                                     >
-                                        <Edit2 className="w-4.5 h-4.5" />
+                                        <Edit2 className="w-3.5 h-3.5" />
                                     </button>
                                     <button
-                                        onClick={() => handleDelete(item.id, item.name)}
-                                        className="p-2.5 hover:bg-red-50 text-muted-foreground hover:text-red-500 rounded-xl transition-all hover:scale-110 active:scale-95 duration-200"
-                                        title="Excluir"
+                                        onClick={() => {
+                                            if (confirm('Excluir esta categoria?')) {
+                                                deleteCategory(cat.dbId || cat.id);
+                                                toast.success('Categoria excluída');
+                                            }
+                                        }}
+                                        className="p-1.5 hover:bg-red-50 text-zinc-400 hover:text-red-500 rounded-lg transition-colors"
                                     >
-                                        <Trash2 className="w-4.5 h-4.5" />
+                                        <Trash2 className="w-3.5 h-3.5" />
                                     </button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-                {filteredItems.length === 0 && (
-                    <div className="flex flex-col items-center justify-center py-20 text-muted-foreground">
-                        <Search className="w-12 h-12 mb-4 opacity-20" />
-                        <p className="text-lg font-medium">Nenhum item encontrado.</p>
-                        <p className="text-sm opacity-60">Tente buscar por outro termo ou categoria.</p>
-                    </div>
-                )}
-            </div>
+                                </div>
+                            </div>
+                            <h3 className="font-bold text-sm text-zinc-900 leading-tight">{cat.name}</h3>
+                            <div className="mt-2 inline-flex px-2.5 py-1 rounded-lg bg-zinc-100 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                                {cat.type === 'alacarte' ? 'À La Carte' : 'Rodízio'}
+                            </div>
+                        </div>
+                    ))}
+                    {allCats.length === 0 && (
+                        <div className="col-span-full flex flex-col items-center justify-center py-16 text-zinc-400">
+                            <LayoutGrid className="w-10 h-10 mb-3 opacity-20" />
+                            <p className="text-sm font-medium">Nenhuma categoria criada.</p>
+                        </div>
+                    )}
+                </div>
+            )}
 
-            {/* Modal */}
-            {isModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm animate-in fade-in duration-200">
-                    <div className="bg-card w-full max-w-2xl rounded-3xl shadow-2xl border border-border/50 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
-                        <div className="flex items-center justify-between p-8 border-b border-border/50 bg-muted/20">
+            {/* ──────────────── ITEM MODAL ──────────────── */}
+            {isItemModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-2xl rounded-2xl shadow-2xl border border-zinc-100 max-h-[90vh] overflow-y-auto animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-zinc-100">
                             <div>
-                                <h3 className="text-2xl font-bold text-foreground">
+                                <h3 className="text-lg font-bold text-zinc-900">
                                     {editingItem ? 'Editar Produto' : 'Novo Produto'}
                                 </h3>
-                                <p className="text-sm text-muted-foreground">Preencha os detalhes abaixo.</p>
+                                <p className="text-xs text-zinc-400 mt-0.5">Preencha os detalhes abaixo.</p>
                             </div>
                             <button
-                                onClick={() => setIsModalOpen(false)}
-                                className="p-2 rounded-full hover:bg-secondary transition-colors"
+                                onClick={() => setIsItemModalOpen(false)}
+                                className="p-2 rounded-xl hover:bg-zinc-100 transition-colors text-zinc-400"
                             >
-                                <X className="w-6 h-6 text-muted-foreground" />
+                                <X className="w-5 h-5" />
                             </button>
                         </div>
 
-                        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+                        <form onSubmit={handleSubmitItem} className="p-6 space-y-4">
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Nome</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Nome *</label>
                                     <input
                                         required
-                                        className="w-full p-2 rounded-lg border border-border bg-background"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all"
                                         value={formData.name}
                                         onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Código (Opcional)</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Código (Opcional)</label>
                                     <input
-                                        className="w-full p-2 rounded-lg border border-border bg-background"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all"
                                         value={formData.code || ''}
                                         onChange={e => setFormData({ ...formData, code: e.target.value })}
                                     />
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Descrição</label>
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-zinc-600">Descrição</label>
                                 <textarea
-                                    className="w-full p-2 rounded-lg border border-border bg-background min-h-[80px]"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all min-h-[80px] resize-none"
                                     value={formData.description || ''}
                                     onChange={e => setFormData({ ...formData, description: e.target.value })}
                                 />
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Preço (R$)</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Preço (R$) *</label>
                                     <input
                                         type="number" step="0.01"
-                                        className="w-full p-2 rounded-lg border border-border bg-background"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all"
                                         value={formData.price}
                                         onChange={e => setFormData({ ...formData, price: parseFloat(e.target.value) })}
                                     />
                                 </div>
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Categoria</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Categoria *</label>
                                     <select
-                                        className="w-full p-2 rounded-lg border border-border bg-background"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all bg-white"
                                         value={formData.category}
                                         onChange={e => setFormData({ ...formData, category: e.target.value })}
                                     >
@@ -296,15 +387,16 @@ export function AdminMenu() {
                                 </div>
                             </div>
 
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium">Imagem</label>
+                            {/* Image Upload */}
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-zinc-600">Imagem</label>
                                 <div className="flex gap-4 items-start">
                                     <div className="flex-1">
-                                        <label className="flex flex-col items-center justify-center w-full h-32 border-2 border-dashed border-border rounded-xl cursor-pointer hover:bg-secondary/50 hover:border-primary/50 transition-all group">
-                                            <div className="flex flex-col items-center justify-center pt-5 pb-6">
-                                                <ImageIcon className="w-8 h-8 text-muted-foreground mb-2 group-hover:text-primary transition-colors" />
-                                                <p className="mb-1 text-sm text-muted-foreground"><span className="font-semibold text-primary">Clique para enviar</span> ou arraste</p>
-                                                <p className="text-xs text-muted-foreground">JPG, PNG ou WebP</p>
+                                        <label className="flex flex-col items-center justify-center w-full h-28 border-2 border-dashed border-zinc-200 rounded-xl cursor-pointer hover:bg-zinc-50 hover:border-zinc-400 transition-all group">
+                                            <div className="flex flex-col items-center justify-center py-4">
+                                                <ImageIcon className="w-7 h-7 text-zinc-300 mb-2 group-hover:text-zinc-500 transition-colors" />
+                                                <p className="text-xs text-zinc-400"><span className="font-semibold text-zinc-600">Clique para enviar</span> ou arraste</p>
+                                                <p className="text-[10px] text-zinc-300 mt-0.5">JPG, PNG ou WebP</p>
                                             </div>
                                             <input
                                                 type="file"
@@ -314,9 +406,7 @@ export function AdminMenu() {
                                                     const file = e.target.files?.[0];
                                                     if (file) {
                                                         const reader = new FileReader();
-                                                        reader.onloadend = () => {
-                                                            setFormData({ ...formData, image: reader.result as string });
-                                                        };
+                                                        reader.onloadend = () => setFormData({ ...formData, image: reader.result as string });
                                                         reader.readAsDataURL(file);
                                                     }
                                                 }}
@@ -324,14 +414,14 @@ export function AdminMenu() {
                                         </label>
                                     </div>
                                     {formData.image && (
-                                        <div className="w-32 h-32 rounded-xl bg-secondary shrink-0 overflow-hidden border border-border shadow-sm group relative">
+                                        <div className="w-28 h-28 rounded-xl bg-zinc-100 shrink-0 overflow-hidden border border-zinc-200 relative group">
                                             <img src={formData.image} alt="Preview" className="w-full h-full object-cover" />
                                             <button
                                                 type="button"
                                                 onClick={() => setFormData({ ...formData, image: '' })}
-                                                className="absolute top-2 right-2 bg-black/50 hover:bg-red-500 text-white rounded-full p-1.5 backdrop-blur-sm transition-all"
+                                                className="absolute top-2 right-2 bg-black/60 hover:bg-red-500 text-white rounded-full p-1.5 backdrop-blur-sm transition-all"
                                             >
-                                                <X className="w-4 h-4" />
+                                                <X className="w-3 h-3" />
                                             </button>
                                         </div>
                                     )}
@@ -339,10 +429,10 @@ export function AdminMenu() {
                             </div>
 
                             <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <label className="text-sm font-medium">Estação de Preparo</label>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Estação de Preparo</label>
                                     <select
-                                        className="w-full p-2 rounded-lg border border-border bg-background"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 focus:border-zinc-400 outline-none transition-all bg-white"
                                         value={formData.station || 'kitchen'}
                                         onChange={e => setFormData({ ...formData, station: e.target.value as any })}
                                     >
@@ -351,32 +441,95 @@ export function AdminMenu() {
                                         <option value="bar">Bar / Copa</option>
                                     </select>
                                 </div>
-                                <div className="flex items-end pb-3">
-                                    <label className="flex items-center gap-2 cursor-pointer">
+                                <div className="flex items-end pb-1">
+                                    <label className="flex items-center gap-2.5 cursor-pointer p-3 rounded-xl hover:bg-zinc-50 transition-colors w-full">
                                         <input
                                             type="checkbox"
-                                            className="w-5 h-5 rounded border-input accent-primary cursor-pointer"
+                                            className="w-4 h-4 rounded border-zinc-300 accent-zinc-900 cursor-pointer"
                                             checked={formData.isRodizio}
                                             onChange={e => setFormData({ ...formData, isRodizio: e.target.checked })}
                                         />
-                                        <span className="font-medium">Incluído no Rodízio?</span>
+                                        <span className="text-sm font-medium text-zinc-700">Incluso no Rodízio</span>
                                     </label>
                                 </div>
                             </div>
 
-                            <div className="flex justify-end gap-3 pt-4 border-t border-border">
+                            <div className="flex justify-end gap-2.5 pt-4 border-t border-zinc-100">
                                 <button
                                     type="button"
-                                    onClick={() => setIsModalOpen(false)}
-                                    className="px-4 py-2 rounded-xl hover:bg-secondary transition-colors"
+                                    onClick={() => setIsItemModalOpen(false)}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors"
                                 >
                                     Cancelar
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-4 py-2 bg-primary text-primary-foreground rounded-xl font-medium hover:brightness-110"
+                                    className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors"
                                 >
                                     Salvar Alterações
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
+
+            {/* ──────────────── CATEGORY MODAL ──────────────── */}
+            {isCatModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm animate-in fade-in duration-200">
+                    <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl border border-zinc-100 animate-in zoom-in-95 duration-200">
+                        <div className="flex items-center justify-between p-6 border-b border-zinc-100">
+                            <h3 className="text-lg font-bold text-zinc-900">
+                                {editingCategory ? 'Editar' : 'Nova'} Categoria
+                            </h3>
+                            <button onClick={() => setIsCatModalOpen(false)} className="p-2 rounded-xl hover:bg-zinc-100 transition-colors text-zinc-400">
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+                        <form onSubmit={handleSaveCategory} className="p-6 space-y-4">
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-semibold text-zinc-600">Nome *</label>
+                                <input
+                                    required
+                                    className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm focus:ring-2 focus:ring-zinc-200 outline-none transition-all"
+                                    value={catFormData.name}
+                                    onChange={e => setCatFormData({ ...catFormData, name: e.target.value })}
+                                />
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Ícone (Emoji)</label>
+                                    <input
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm text-center text-2xl focus:ring-2 focus:ring-zinc-200 outline-none transition-all"
+                                        value={catFormData.icon}
+                                        onChange={e => setCatFormData({ ...catFormData, icon: e.target.value })}
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-semibold text-zinc-600">Tipo</label>
+                                    <select
+                                        className="w-full px-3 py-2.5 rounded-xl border border-zinc-200 text-sm bg-white focus:ring-2 focus:ring-zinc-200 outline-none transition-all"
+                                        value={catFormData.type}
+                                        onChange={e => setCatFormData({ ...catFormData, type: e.target.value })}
+                                    >
+                                        <option value="rodizio">Rodízio</option>
+                                        <option value="alacarte">À La Carte</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div className="flex justify-end gap-2.5 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setIsCatModalOpen(false)}
+                                    className="px-4 py-2.5 rounded-xl text-sm font-semibold text-zinc-600 hover:bg-zinc-100 transition-colors"
+                                >
+                                    Cancelar
+                                </button>
+                                <button
+                                    type="submit"
+                                    className="px-5 py-2.5 bg-zinc-900 text-white rounded-xl text-sm font-semibold hover:bg-zinc-800 transition-colors"
+                                >
+                                    Salvar Categoria
                                 </button>
                             </div>
                         </form>

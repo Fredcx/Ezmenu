@@ -1,9 +1,8 @@
-
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { StaffTables } from './StaffTables';
-import { AdminKitchen } from './AdminKitchen';
+import { StaffRequests } from './StaffRequests';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Armchair, ChefHat, LogOut, User } from 'lucide-react';
+import { Armchair, LogOut, User, Bell } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { supabase } from '@/lib/supabase';
 import { toast } from 'sonner';
@@ -12,47 +11,46 @@ export const StaffDashboard = () => {
     const { slug } = useParams();
     const navigate = useNavigate();
     const [isLoading, setIsLoading] = useState(!slug);
+    const [establishmentId, setEstablishmentId] = useState<string | null>(null);
+    const [pendingRequests, setPendingRequests] = useState(0);
 
     useEffect(() => {
         const checkContext = async () => {
             if (!slug) {
                 const { data: { session } } = await supabase.auth.getSession();
-                if (!session) {
-                    navigate('/equipe/login');
-                    return;
-                }
+                if (!session) { navigate('/equipe/login'); return; }
 
-                const { data: profile } = await supabase
-                    .from('profiles')
-                    .select('role, establishment_id')
-                    .eq('id', session.user.id)
-                    .single();
+                const { data: profile } = await supabase.from('profiles').select('role, establishment_id').eq('id', session.user.id).single();
+                if (!profile?.establishment_id) { toast.error("Vínculo não encontrado"); navigate('/equipe/login'); return; }
 
-                if (!profile?.establishment_id) {
-                    toast.error("Vínculo administrativo não encontrado");
-                    navigate('/equipe/login');
-                    return;
-                }
-
-                const { data: est } = await supabase
-                    .from('establishments')
-                    .select('slug')
-                    .eq('id', profile.establishment_id)
-                    .single();
-
-                if (est?.slug) {
-                    navigate(`/${est.slug}/equipe`, { replace: true });
-                } else {
-                    toast.error("Estabelecimento não encontrado");
-                    navigate('/equipe/login');
-                }
+                const { data: est } = await supabase.from('establishments').select('slug').eq('id', profile.establishment_id).single();
+                if (est?.slug) { navigate(`/${est.slug}/equipe`, { replace: true }); }
+                else { toast.error("Estabelecimento não encontrado"); navigate('/equipe/login'); }
             } else {
+                const { data: est } = await supabase.from('establishments').select('id').eq('slug', slug).single();
+                if (est) setEstablishmentId(est.id);
                 setIsLoading(false);
             }
         };
-
         checkContext();
     }, [slug, navigate]);
+
+    const fetchRequestsBadge = useCallback(async () => {
+        if (!establishmentId) return;
+        const { count } = await supabase.from('service_requests').select('*', { count: 'exact', head: true }).eq('establishment_id', establishmentId).eq('status', 'pending');
+        setPendingRequests(count || 0);
+    }, [establishmentId]);
+
+    useEffect(() => {
+        fetchRequestsBadge();
+        if (!establishmentId) return;
+        const ch = supabase.channel(`staff_dash_${establishmentId}`)
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'service_requests', filter: `establishment_id=eq.${establishmentId}` }, () => {
+                fetchRequestsBadge();
+            })
+            .subscribe();
+        return () => { supabase.removeChannel(ch); };
+    }, [establishmentId, fetchRequestsBadge]);
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
@@ -62,67 +60,62 @@ export const StaffDashboard = () => {
 
     if (isLoading) {
         return (
-            <div className="h-screen flex flex-col items-center justify-center gap-4 bg-secondary/10">
-                <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
-                <p className="font-bold text-muted-foreground animate-pulse">Carregando portal...</p>
+            <div className="min-h-screen flex flex-col items-center justify-center bg-zinc-50">
+                <div className="w-8 h-8 border-4 border-zinc-900 border-t-transparent rounded-full animate-spin mb-4" />
+                <p className="font-bold text-zinc-400 font-mono text-xs tracking-widest uppercase animate-pulse">Carregando</p>
             </div>
         );
     }
 
     return (
-        <div className="min-h-screen bg-secondary/10 flex flex-col">
-            {/* Header / Top Bar */}
-            <header className="bg-white border-b border-border/40 px-6 py-4 flex items-center justify-between sticky top-0 z-50 shadow-sm">
+        <div className="min-h-[100dvh] bg-zinc-50 flex flex-col font-sans">
+            {/* Minimalist Top Header */}
+            <header className="bg-white border-b border-zinc-200 px-5 flex items-center justify-between sticky top-0 z-50 h-16 shadow-sm">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-primary/10 rounded-2xl flex items-center justify-center text-primary">
-                        <User className="w-6 h-6" />
+                    <div className="w-10 h-10 bg-zinc-100 rounded-xl flex items-center justify-center text-zinc-900 border border-zinc-200">
+                        <User className="w-5 h-5" />
                     </div>
                     <div>
-                        <h1 className="font-black text-sm uppercase tracking-tight leading-none">{slug?.replace('-', ' ')}</h1>
-                        <p className="text-[10px] font-bold text-emerald-600 uppercase tracking-widest mt-1">PAINEL DO GARÇOM</p>
+                        <h1 className="font-black text-base text-zinc-900 tracking-tight leading-none mb-0.5">{slug?.replace('-', ' ')}</h1>
+                        <p className="text-[9px] font-black text-red-600 uppercase tracking-widest leading-none">Painel do Garçom</p>
                     </div>
                 </div>
 
                 <button 
                     onClick={handleLogout}
-                    className="p-3 hover:bg-red-50 text-red-500 rounded-2xl transition-all active:scale-95 border border-transparent hover:border-red-100"
+                    className="w-10 h-10 flex items-center justify-center text-zinc-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors active:scale-95"
                 >
                     <LogOut className="w-5 h-5" />
                 </button>
             </header>
 
-            {/* Main Content */}
-            <main className="flex-1 p-4 md:p-8">
-                <Tabs defaultValue="tables" className="space-y-6">
-                    <TabsList className="grid grid-cols-2 w-full max-w-md mx-auto h-16 p-2 rounded-[2rem] bg-white border border-border/40 shadow-sm">
-                        <TabsTrigger value="tables" className="rounded-[1.5rem] gap-2 font-black text-xs uppercase tracking-tight data-[state=active]:bg-primary data-[state=active]:text-white">
-                            <Armchair className="w-4 h-4" /> MAPA
+            {/* Mobile Main Content */}
+            <main className="flex-1 p-4 md:max-w-md md:mx-auto md:w-full">
+                <Tabs defaultValue="tables" className="flex flex-col h-full">
+                    <TabsList className="grid grid-cols-2 w-full h-[52px] p-1.5 rounded-2xl bg-white border border-zinc-200 shadow-sm mb-5">
+                        <TabsTrigger value="tables" className="rounded-xl gap-2 font-bold text-xs uppercase tracking-wider data-[state=active]:bg-zinc-900 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
+                            <Armchair className="w-4 h-4" /> Mapa
                         </TabsTrigger>
-                        <TabsTrigger value="kitchen" className="rounded-[1.5rem] gap-2 font-black text-xs uppercase tracking-tight data-[state=active]:bg-primary data-[state=active]:text-white">
-                            <ChefHat className="w-4 h-4" /> PEDIDOS
+                        <TabsTrigger value="requests" className="relative rounded-xl gap-2 font-bold text-xs uppercase tracking-wider data-[state=active]:bg-zinc-900 data-[state=active]:text-white data-[state=active]:shadow-md transition-all">
+                            <Bell className="w-4 h-4" /> Chamados
+                            {pendingRequests > 0 && (
+                                <span className="absolute -top-1.5 -right-1.5 flex h-4 w-4">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-4 w-4 bg-red-500 items-center justify-center text-[9px] text-white font-bold">{pendingRequests}</span>
+                                </span>
+                            )}
                         </TabsTrigger>
                     </TabsList>
 
-                    <TabsContent value="tables" className="h-full mt-0 animate-in fade-in duration-500">
-                        <div className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-black/5 min-h-[600px] border border-border/40 overflow-hidden">
-                             <StaffTables />
-                        </div>
+                    <TabsContent value="tables" className="m-0 border-none outline-none animate-in fade-in zoom-in-95 duration-300">
+                        <StaffTables />
                     </TabsContent>
 
-                    <TabsContent value="kitchen" className="h-full mt-0 animate-in fade-in duration-500">
-                         <div className="bg-white rounded-[2.5rem] p-6 shadow-xl shadow-black/5 min-h-[600px] border border-border/40 overflow-hidden">
-                             <AdminKitchen />
-                         </div>
+                    <TabsContent value="requests" className="m-0 border-none outline-none animate-in fade-in zoom-in-95 duration-300">
+                         <StaffRequests />
                     </TabsContent>
                 </Tabs>
             </main>
-
-            {/* Float Info */}
-            <footer className="p-4 text-center">
-                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-widest opacity-40 italic">
-                    EzMenu Professional Staff v1.0
-                </p>
-            </footer>
         </div>
     );
 };
