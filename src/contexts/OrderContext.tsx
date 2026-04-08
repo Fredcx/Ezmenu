@@ -62,7 +62,7 @@ interface OrderContextType {
   restaurantType: 'sushi' | 'steakhouse' | 'general';
   settings: any | null;
   clearTableSession: () => void;
-  callService: (type: 'waiter' | 'machine') => Promise<void>;
+  callService: (type: 'waiter' | 'machine', observation?: string) => Promise<void>;
   hasActiveRodizio: boolean;
   isRodizioOrdered: boolean;
   isTableOccupiedByMe: boolean;
@@ -135,23 +135,33 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const currentTableName = localStorage.getItem('ez_menu_table_name');
     if (tableStatus === 'occupied' && currentTableName) {
-        const storedStart = localStorage.getItem(`ez_menu_turn_start_${currentTableName}`);
-        if (storedStart && !session?.turnStartTime) {
-            setSession(prev => prev ? { 
-                ...prev, 
-                turnStartTime: new Date(storedStart) 
-            } : {
-                tableId: currentTableName,
-                tableName: currentTableName,
-                clients: occupants.length || 1,
-                turnStartTime: new Date(storedStart),
-                roundLimit: 24,
-                currentRoundItems: 0,
-                roundNumber: 1
-            });
+        const storedStart = localStorage.getItem(`ez_menu_turn_start_${currentTableName}`);        
+        if (storedStart && tableStatus === 'occupied') {
+            const startDate = new Date(storedStart);
+            const now = new Date();
+            const diffHours = (now.getTime() - startDate.getTime()) / (1000 * 60 * 60);
+
+            // Only restore if session is less than 12 hours old
+            if (diffHours < 12 && !isNaN(startDate.getTime())) {
+                setSession(prev => {
+                    const base = prev || {
+                        tableId: currentTableName,
+                        tableName: currentTableName,
+                        clients: occupants.length || 1,
+                        roundLimit: 24,
+                        currentRoundItems: 0,
+                        roundNumber: 1
+                    };
+                    return { ...base, turnStartTime: startDate };
+                });
+            } else {
+                console.log("Stale session detected (>12h). Ignoring start time.");
+                localStorage.removeItem(`ez_menu_turn_start_${currentTableName}`);
+            }
         }
     }
-  }, [tableStatus, session?.turnStartTime, occupants.length]);
+  }, [tableStatus, occupants.length]);
+
   
   const fetchSentOrders = useCallback(async () => {
     if (!establishmentId) return;
@@ -171,16 +181,20 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         `)
         .eq('table_id', currentTableId)
         .eq('establishment_id', establishmentId)
-        .not('status', 'in', '(archived,cancelled)');
+        .neq('status', 'cancelled')
+        .not('status', 'ilike', 'archived%');
 
       if (ordersError) throw ordersError;
 
       const flattenedItems: OrderItem[] = [];
       ordersData?.forEach((order: any) => {
         order.order_items?.forEach((item: any) => {
+          if (item.status === 'cancelled') return; // Skip cancelled items (estornos)
+          
           const menuItem = item.menu_items;
           let finalStatus: OrderItem['status'] = item.status;
           if (order.status === 'completed' || order.status === 'paid' || order.status === 'archived' || item.status === 'ready') finalStatus = 'completed';
+
 
           flattenedItems.push({
             id: menuItem.id,
@@ -208,10 +222,28 @@ export function OrderProvider({ children }: { children: ReactNode }) {
 
   const occupyTable = useCallback(async (partySize?: number) => {
     const tableName = session?.tableName || localStorage.getItem('ez_menu_table_name');
-    if (!tableName || !establishmentId) {
+    
+    // Internal identification retry
+    let effectiveEstablishmentId = establishmentId;
+    if (!effectiveEstablishmentId) {
+        // One last quick check to see if we can resolve it
+        const pathSlug = window.location.pathname.split('/')[1];
+        if (pathSlug && pathSlug !== 'admin' && pathSlug !== 'superadmin') {
+            const { data } = await supabase.from('establishments').select('id').eq('slug', pathSlug).single();
+            if (data) effectiveEstablishmentId = data.id;
+        }
+    }
+
+    if (!tableName || !effectiveEstablishmentId) {
+      // Avoid showing error toast during initial boot if we have a table but ID isn't ready yet
+      if (tableName && !effectiveEstablishmentId) {
+        console.log("Waiting for establishment ID before occupying table...");
+        return false;
+      }
       toast.error('Mesa ou estabelecimento não identificado.');
       return false;
     }
+
 
     try {
       const userEmail = localStorage.getItem('ez_menu_client_email') || '';
@@ -658,6 +690,10 @@ export function OrderProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const clearTableSession = useCallback(() => {
+    const currentTableId = localStorage.getItem('ez_menu_table_name');
+    if (currentTableId) {
+      localStorage.removeItem(`ez_menu_turn_start_${currentTableId}`);
+    }
     localStorage.removeItem('ez_menu_table_name');
     localStorage.removeItem('ez_menu_client_email');
     localStorage.removeItem('ez_menu_client_name');
@@ -667,18 +703,21 @@ export function OrderProvider({ children }: { children: ReactNode }) {
     setSentOrders([]);
   }, []);
 
-  const callService = useCallback(async (type: 'waiter' | 'machine') => {
+
+  const callService = useCallback(async (type: 'waiter' | 'machine', observation?: string) => {
     if (!establishmentId) return;
     try {
       const currentTableId = localStorage.getItem('ez_menu_table_name') || 'Mesa';
       const participants = JSON.parse(localStorage.getItem('ez_menu_table_participants') || '[]');
       const myName = participants.find((p: any) => p.isMe)?.name || localStorage.getItem('ez_menu_client_name') || 'Cliente';
 
+      const finalName = observation ? `Obs: ${observation}` : myName;
+
       const { error } = await supabase.from('service_requests').insert({
         type,
         status: 'pending',
         table_id: currentTableId,
-        user_name: myName,
+        user_name: finalName,
         establishment_id: establishmentId
       });
 
@@ -731,7 +770,12 @@ export function OrderProvider({ children }: { children: ReactNode }) {
         .eq('establishment_id', establishmentId);
       if (serviceError) console.error('Error clearing service requests:', serviceError);
 
+      localStorage.removeItem(`ez_menu_turn_start_${tableId}`);
+      if (session?.tableName === tableId) {
+        setSession(null);
+      }
       await fetchSentOrders();
+
     } catch (err) {
       console.error("Error in resetTableOrders:", err);
     }
@@ -800,17 +844,26 @@ export function OrderProvider({ children }: { children: ReactNode }) {
           setOccupants(data.occupants || []); 
           if (data.seated_at) {
             const seatedDate = new Date(data.seated_at);
-            setSession(prev => prev ? { ...prev, turnStartTime: seatedDate } : {
-              tableId: tableName,
-              tableName: tableName,
-              clients: data.occupants?.length || 1,
-              turnStartTime: seatedDate,
-              roundLimit: 24,
-              currentRoundItems: 0,
-              roundNumber: 1
-            });
+            const now = new Date();
+            const diffHours = (now.getTime() - seatedDate.getTime()) / (1000 * 60 * 60);
+
+            // Only sync if seated_at is within last 12 hours
+            if (diffHours < 12) {
+                setSession(prev => prev ? { ...prev, turnStartTime: seatedDate } : {
+                  tableId: tableName,
+                  tableName: tableName,
+                  clients: data.occupants?.length || 1,
+                  turnStartTime: seatedDate,
+                  roundLimit: 24,
+                  currentRoundItems: 0,
+                  roundNumber: 1
+                });
+            } else {
+               console.log("Database seated_at is stale (>12h). Ignoring.");
+            }
           }
         }
+
       } catch (e) {
         console.error("Error fetching table status", e);
         setTableStatus('free');
@@ -848,7 +901,9 @@ export function OrderProvider({ children }: { children: ReactNode }) {
       fetchSentOrders();
       const channel = supabase.channel(`orders_${establishmentId}`)
         .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `establishment_id=eq.${establishmentId}` }, () => fetchSentOrders())
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => fetchSentOrders())
         .subscribe();
+
       return () => { supabase.removeChannel(channel); };
     }
   }, [fetchSentOrders, establishmentId]);

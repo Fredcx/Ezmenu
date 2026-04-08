@@ -14,6 +14,7 @@ interface MenuHeaderProps {
   isSearchActive?: boolean;
   onBack?: () => void;
   hasTable?: boolean;
+  isGuestMode?: boolean;
 }
 
 export function MenuHeader({
@@ -23,25 +24,45 @@ export function MenuHeader({
   onSearchClick,
   isSearchActive = false,
   onBack,
-  hasTable = true
+  hasTable = true,
+  isGuestMode = false
 }: MenuHeaderProps) {
-  const { restaurantType, session, currentClientId, occupants } = useOrder();
+  const { restaurantType, session, currentClientId, occupants, settings } = useOrder();
   const { establishment } = useMenu();
   const [showDropdown, setShowDropdown] = useState(false);
   const [turnTime, setTurnTime] = useState('00:00');
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (!session?.turnStartTime) return;
+    if (!session?.turnStartTime) {
+      setTurnTime('00:00');
+      return;
+    }
 
     const interval = setInterval(() => {
+      const start = session.turnStartTime instanceof Date ? session.turnStartTime : new Date(session.turnStartTime);
       const now = new Date();
-      const diff = now.getTime() - session.turnStartTime.getTime();
+      
+      if (isNaN(start.getTime())) {
+          setTurnTime('00:00');
+          return;
+      }
+
+      const diff = now.getTime() - start.getTime();
+
+      
+      // Safety guard: If diff is negative or more than 24 hours, treat as 0
+      if (diff < 0 || diff > 24 * 60 * 60 * 1000) {
+        setTurnTime('00:00');
+        return;
+      }
+
       const minutes = Math.floor(diff / 60000);
       const seconds = Math.floor((diff % 60000) / 1000);
       setTurnTime(
         `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`
       );
+
     }, 1000);
 
     return () => clearInterval(interval);
@@ -62,9 +83,13 @@ export function MenuHeader({
   }
 
   const currentMenu = menus.find(m => m.id === selectedMenu) || menus[0];
+  
+  const rodizioPriceAdult = settings?.rodizio_price_adult || 129.99;
+  const rodizioPriceChild = settings?.rodizio_price_child || 69.99;
 
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between px-3 sm:px-5 py-4 glass border-b border-border/40 transition-all duration-300 w-full max-w-[1920px] mx-auto">
+      
       {/* Back Button or Menu Selector */}
       <div className="flex items-center gap-3">
         {!hasTable && onBack && (
@@ -126,8 +151,23 @@ export function MenuHeader({
         )}
       </div>
 
+      {/* Guest Mode Rodizio Price Info */}
+      {isGuestMode && selectedMenu === 'rodizio' && (
+        <div className="flex flex-col sm:flex-row items-center gap-1 sm:gap-3 shrink-0 mx-auto animate-in fade-in zoom-in-95 duration-500 bg-secondary/40 backdrop-blur-md rounded-2xl px-3 py-1.5 border border-border/20">
+             <div className="flex items-center gap-1.5">
+                 <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Adulto</span>
+                 <span className="text-sm font-black text-emerald-600">R$ {rodizioPriceAdult.toFixed(2)}</span>
+             </div>
+             <div className="hidden sm:block w-[1px] h-4 bg-border/50" />
+             <div className="flex items-center gap-1.5">
+                 <span className="text-[9px] font-bold text-muted-foreground uppercase tracking-widest">Criança</span>
+                 <span className="text-sm font-black text-orange-500">R$ {rodizioPriceChild.toFixed(2)}</span>
+             </div>
+        </div>
+      )}
+
       {/* Mini Status Bar (Compact Redesign) */}
-      {hasTable && session && (
+      {!isGuestMode && hasTable && session && (
         <div className="flex items-center gap-2 bg-secondary/40 backdrop-blur-md rounded-2xl px-2.5 sm:px-3.5 py-2 border border-border/20 animate-in fade-in zoom-in-95 duration-500 scale-95 sm:scale-100 shrink-0">
            {/* Table Label */}
            <div className="flex items-center gap-1.5 pr-2.5 border-r border-border/30">
@@ -153,7 +193,7 @@ export function MenuHeader({
       )}
 
       {/* Action Buttons */}
-      <div className="flex items-center gap-2">
+      <div className={`flex items-center gap-2 ${isGuestMode ? 'ml-auto' : ''}`}>
         <button
           onClick={onSearchClick}
           className={`p-3 rounded-2xl transition-premium active:scale-90 ${isSearchActive 

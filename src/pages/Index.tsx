@@ -1,8 +1,11 @@
 import { useState, useEffect } from 'react';
-import { OrderProvider } from '@/contexts/OrderContext';
+import { OrderProvider, useOrder } from '@/contexts/OrderContext';
+import { supabase } from '@/lib/supabase';
+
+
 import { RodizioSelectionScreen } from '@/components/RodizioSelectionScreen';
 import { PaymentWrapper } from '@/components/PaymentWrapper';
-import { LandingScreenV2 as LandingScreen } from '@/components/LandingScreenV2';
+import { GatewayScreen } from '@/components/GatewayScreen';
 import { MenuScreen } from '@/components/MenuScreen';
 import { useParams } from 'react-router-dom';
 import { DiscoveryScreen } from '@/components/DiscoveryScreen';
@@ -17,8 +20,12 @@ import { AccessScreen } from '@/components/AccessScreen';
 
 function AppContent() {
   const { slug, categorySlug } = useParams();
-  const [hasAccess, setHasAccess] = useState(false);
-  const [activeTab, setActiveTab] = useState<TabId>('home');
+  const { occupyTable, establishmentId, clearTableSession } = useOrder();
+
+
+
+  const [viewMode, setViewMode] = useState<'gateway' | 'login' | 'guest_menu' | 'authenticated'>('gateway');
+  const [activeTab, setActiveTab] = useState<TabId>('menu');
   const [isLoadingSession, setIsLoadingSession] = useState(true);
   const [hasTable, setHasTable] = useState(false);
   const location = window.location.pathname;
@@ -64,24 +71,57 @@ function AppContent() {
       // localStorage.removeItem('ez_menu_table_name');
     }
 
-    const checkSession = () => {
+    const checkSession = async () => {
       const storedAccess = localStorage.getItem('ez_menu_access');
       const storedTime = localStorage.getItem('ez_menu_access_time');
+      const currentTableId = tableParam || localStorage.getItem('ez_menu_table_name');
       const SESSION_DURATION = 60 * 60 * 1000; // 1 hour
 
       if (storedAccess === 'granted' && storedTime) {
         const isValid = (Date.now() - parseInt(storedTime, 10)) < SESSION_DURATION;
+        
+        // --- NEW: Session Lifecycle Validation ---
+        // If we are at a table, verify it is still occupied in DB
+        if (isValid && currentTableId && establishmentId) {
+            const { data: tableData } = await supabase
+                .from('restaurant_tables')
+                .select('status')
+                .eq('id', currentTableId)
+                .eq('establishment_id', establishmentId)
+                .single();
+            
+            if (tableData && tableData.status === 'free') {
+                console.log("Table has been freed in DB. Resetring session...");
+                clearTableSession();
+                setViewMode('gateway');
+                setIsLoadingSession(false);
+                return;
+            }
+        }
+
         if (isValid) {
-          setHasAccess(true);
+          setViewMode('authenticated');
+          setActiveTab('menu');
+          // If already at a table with active session, ensure it's occupied
+          if ((tableParam || hasTable) && establishmentId) {
+            occupyTable();
+          }
+
         } else {
+
           localStorage.removeItem('ez_menu_access');
           localStorage.removeItem('ez_menu_access_time');
+          setViewMode('gateway');
         }
+      } else {
+        setViewMode('gateway');
       }
       setIsLoadingSession(false);
     };
+
     checkSession();
-  }, [window.location.search]);
+  }, [window.location.search, establishmentId]);
+
 
   useEffect(() => {
     const handleNav = (e: any) => {
@@ -100,54 +140,91 @@ function AppContent() {
   const [homeView, setHomeView] = useState<'landing' | 'rodizio'>('landing');
   const [menuCategory, setMenuCategory] = useState<string | undefined>();
   const [initialMenu, setInitialMenu] = useState<string>('menu');
+  const [isOccupying, setIsOccupying] = useState(false);
 
-  // Handle access grant
-  const handleAccessGranted = (name: string, email: string) => {
-    console.log('User accessed:', name, email);
-    setHasAccess(true);
-    localStorage.setItem('ez_menu_access', 'granted');
-    localStorage.setItem('ez_menu_access_time', Date.now().toString());
 
-    if (name === 'Visitante') {
-      localStorage.removeItem('ez_menu_client_name');
-      localStorage.removeItem('ez_menu_client_email');
-      localStorage.removeItem('ez_menu_table_name');
-      setHasTable(false);
-    } else {
+  const handleAccessGranted = async (name: string, email: string) => {
+    setIsOccupying(true);
+    try {
+      console.log('User accessed:', name, email);
+      
+      localStorage.setItem('ez_menu_access', 'granted');
+      localStorage.setItem('ez_menu_access_time', Date.now().toString());
+
       if (name) localStorage.setItem('ez_menu_client_name', name);
-      if (email) localStorage.setItem('ez_menu_client_email', email);
+      if (email) localStorage.setItem('ez_menu_client_email', email.trim().toLowerCase());
+        
+      // Mark table as occupied immediately upon identification
+      // occupyTable now handles its own internal identification retry
+      if (hasTable) {
+        const success = await occupyTable();
+        if (!success) {
+          localStorage.removeItem('ez_menu_access');
+          setIsOccupying(false);
+          return;
+        }
+      }
+
+      setViewMode('authenticated');
+      setActiveTab('menu');
+    } catch (err) {
+        console.error("Login Error:", err);
+    } finally {
+        setIsOccupying(false);
     }
   };
+
+
 
   if (!slug) {
     return <DiscoveryScreen />;
   }
 
-  if (isLoadingSession) {
-    return <div className="h-screen w-full flex items-center justify-center bg-background"><div className="w-10 h-10 border-4 border-primary border-t-transparent rounded-full animate-spin" /></div>;
+  // Gate: Wait for establishment identification before showing any interactive screen
+  if (isLoadingSession || !establishmentId) {
+    return (
+      <div className="h-[100dvh] w-full flex flex-col items-center justify-center bg-[#FAFAFA] p-6 selection:bg-primary/20">
+        <div className="fixed inset-0 z-0 pointer-events-none overflow-hidden flex items-center justify-center">
+            <div className="absolute top-[-20%] -left-10 w-[70vw] h-[70vw] bg-primary/5 rounded-[100%] blur-[120px] opacity-60" />
+            <div className="absolute bottom-[-10%] -right-20 w-[80vw] h-[80vw] bg-stone-300/20 rounded-[100%] blur-[120px] opacity-70" />
+        </div>
+        <div className="relative z-10 flex flex-col items-center gap-6">
+            <div className="w-16 h-16 border-[5px] border-primary/10 border-t-primary rounded-full animate-spin" />
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-neutral-400 animate-pulse">
+                Identificando Estabelecimento...
+            </p>
+        </div>
+      </div>
+    );
   }
 
-  if (!hasAccess) {
-    return <AccessScreen onAccessGranted={handleAccessGranted} />;
+  if (viewMode === 'gateway') {
+
+    return (
+      <GatewayScreen 
+        tableName={localStorage.getItem('ez_menu_table_name')} 
+        onOccupyTable={() => setViewMode('login')} 
+        onViewMenu={() => setViewMode('guest_menu')} 
+      />
+    );
   }
 
-  const handleStartOrder = () => {
-    setHasStarted(true);
-    setInitialMenu(hasTable ? 'menu' : 'alacarte');
-    setActiveTab('menu');
-  };
+  if (viewMode === 'login') {
+    return (
+        <AccessScreen 
+            onGranted={handleAccessGranted} 
+            hasTable={hasTable} 
+            isLoading={isOccupying}
+        />
+    );
+  }
 
   const handleTabChange = (tab: TabId) => {
-    if (tab === 'home') {
-      if (activeTab === 'home' && !hasTable) {
-        window.location.href = '/';
+    if (tab === 'home' && viewMode === 'guest_menu') {
+        setViewMode('login');
         return;
-      }
-      setHomeView('landing');
-      setActiveTab('home');
-    } else {
-      setActiveTab(tab);
     }
+    setActiveTab(tab);
   };
 
   const handleLandingOption = (option: any) => {
@@ -192,8 +269,6 @@ function AppContent() {
   };
 
   const handleBackToLanding = () => {
-    setHomeView('landing');
-    setActiveTab('home');
     setMenuCategory(undefined);
   };
 
@@ -201,25 +276,15 @@ function AppContent() {
     <div className="w-full h-[100dvh] flex justify-center bg-background overflow-hidden">
       <div className="w-full h-full bg-background flex flex-col relative overflow-hidden">
       <div className="flex-1 overflow-hidden relative flex flex-col">
-        {activeTab === 'home' && (
-          homeView === 'landing' ? (
-            <LandingScreen onSelectOption={handleLandingOption} hasTable={hasTable} />
-          ) : (
-            <RodizioSelectionScreen
-              onStartOrder={handleStartOrder}
-              onBack={() => setHomeView('landing')}
-              hasTable={hasTable}
-            />
-          )
-        )}
         {activeTab === 'menu' && (
           <MenuScreen
             key={`${menuCategory}-${initialMenu}`}
             initialCategory={menuCategory}
             initialMenu={initialMenu}
-            onNavigateToRodizio={() => handleLandingOption('rodizio')}
+            onNavigateToRodizio={() => setActiveTab('menu')}
             onBackToLanding={handleBackToLanding}
             hasTable={hasTable}
+            isGuestMode={viewMode === 'guest_menu'}
           />
         )}
         {activeTab === 'account' && <PaymentWrapper onBack={() => setActiveTab('menu')} />}
@@ -234,8 +299,20 @@ function AppContent() {
         onClick={() => setActiveTab('cart')}
       />
 
-      {activeTab !== 'cart' && activeTab !== 'account' && (
-        <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} hasTable={hasTable} variant="floating" />
+      {activeTab !== 'cart' && activeTab !== 'account' && viewMode !== 'guest_menu' && (
+        <BottomNavigation activeTab={activeTab} onTabChange={handleTabChange} hasTable={hasTable} variant="floating" viewMode={viewMode} />
+      )}
+
+      {viewMode === 'guest_menu' && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-full max-w-sm px-6 z-50 animate-in slide-in-from-bottom-5 duration-500">
+            <button
+                onClick={() => setViewMode('login')}
+                className="w-full bg-primary text-white py-4 rounded-2xl shadow-[0_15px_30px_rgba(237,27,46,0.3)] border border-primary/20 flex flex-col items-center justify-center gap-1 active:scale-95 transition-premium"
+            >
+                <span className="text-sm font-black uppercase tracking-wider">Começar seus pedidos!</span>
+                <span className="text-[10px] font-semibold text-white/70 uppercase">Ocupe a mesa agora</span>
+            </button>
+        </div>
       )}
       </div>
     </div>

@@ -19,11 +19,19 @@ interface MenuScreenProps {
   onBackToLanding?: () => void;
   hasTable?: boolean;
   variant?: 'default' | 'premium';
+  isGuestMode?: boolean;
 }
 
-export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateToRodizio, onBackToLanding, hasTable = false, variant = 'default' }: MenuScreenProps) {
-  const [selectedMenu, setSelectedMenu] = useState(initialMenu);
-  const [selectedCategory, setSelectedCategory] = useState(initialCategory || (hasTable ? 'sashimi' : 'entradas'));
+export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateToRodizio, onBackToLanding, hasTable = false, variant = 'default', isGuestMode = false }: MenuScreenProps) {
+  // Normalize initial menu selection
+  const normalizedInitialMenu = initialMenu === 'menu' ? 'alacarte' : initialMenu;
+  const [selectedMenu, setSelectedMenu] = useState(normalizedInitialMenu);
+  
+  // Default category should match the menu mode
+  const defaultCategory = initialCategory || (normalizedInitialMenu === 'rodizio' ? 'sashimi' : 'entradas');
+  const [selectedCategory, setSelectedCategory] = useState(defaultCategory);
+
+
   const [selectedSubcategory, setSelectedSubcategory] = useState<string | null>(null);
   const [showFilter, setShowFilter] = useState(false);
   const [selectedAllergens, setSelectedAllergens] = useState<string[]>([]);
@@ -34,16 +42,24 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
   const [detailsItem, setDetailsItem] = useState<MenuItem | null>(null);
   const { items: menuItems, categories: rodizioCategories, alacarteCategories, establishment } = useMenu();
 
-  // REMOVED Redundant synchronizer that was overriding initialCategory logic
+  // Sync state with props on mount or change only if it specifically identifies a category
+  // We removed the selectedMenu sync because it was "fighting" with local state updates
+  useEffect(() => {
+    if (initialCategory && initialCategory !== selectedCategory) {
+        setSelectedCategory(initialCategory);
+    }
+  }, [initialCategory, selectedCategory]);
+
+
 
   const handleMenuChange = (menuId: string) => {
-    // If switching to rodizio, trigger navigation
-    if (menuId === 'rodizio' && onNavigateToRodizio) {
-      onNavigateToRodizio();
-      return;
-    }
-
     setSelectedMenu(menuId);
+    
+    // Clear active category search when changing menu to avoid showing empty screens
+    setSelectedCategory('');
+
+    setSelectedSubcategory(null);
+    clearFilters();
 
     // Give the DOM a moment to update categories if we switched modes
     setTimeout(() => {
@@ -51,6 +67,11 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
         const settingsSections = establishment?.settings?.menu_sections;
         const configSection = Array.isArray(settingsSections) ? settingsSections.find((s: any) => s.id === menuId) : null;
         
+        // Define mode-specific current categories
+        const isTargetAlacarte = ['alacarte', 'drinks', 'desserts', 'wines', 'cocktails'].includes(menuId);
+        const cats = isTargetAlacarte ? alacarteCategories : rodizioCategories;
+        const filteredCats = cats.filter(cat => !cat.name.toUpperCase().includes('SISTEMA'));
+
         let targetName = configSection?.categoryName || '';
 
         // Fallback to defaults if no custom mapping exists
@@ -63,19 +84,25 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
 
         if (targetName) {
             const normalizedTargetName = targetName.toLowerCase().replace(/s$/, ''); // Remove trailing 's' if any
-            const targetCat = alacarteCategories.find(c => 
+            const targetCat = filteredCats.find(c => 
                 c.name.toLowerCase().includes(normalizedTargetName)
             );
             if (targetCat) {
                 handleCategorySelect(targetCat.id);
+                return;
             }
-        } else if (['alacarte', 'menu'].includes(menuId) && alacarteCategories.length > 0) {
-            handleCategorySelect(alacarteCategories[0].id);
+        } 
+        
+        // Final fallback: First category of the new mode
+        if (filteredCats.length > 0) {
+            handleCategorySelect(filteredCats[0].id);
         }
     }, 100);
   };
 
-  const isAlacarteMode = ['alacarte', 'menu', 'drinks', 'desserts', 'wines', 'cocktails'].includes(selectedMenu);
+
+  const isAlacarteMode = ['alacarte', 'drinks', 'desserts', 'wines', 'cocktails'].includes(selectedMenu);
+
 
   const filteredItems = useMemo(() => {
     return menuItems.filter((item) => {
@@ -106,9 +133,19 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
         if (!hasTag) return false;
       }
 
+      // Rodizio vs Alacarte mutual exclusive filter
+      if (selectedMenu === 'rodizio') {
+          if (!item.isRodizio) return false;
+      } else {
+          // In Alacarte mode (or sub-menus like drinks/desserts), only show non-rodizio items
+          // unless it is a specific system item that should be visible (rare)
+          if (item.isRodizio) return false;
+      }
+
       return true;
     });
-  }, [selectedCategory, selectedSubcategory, selectedAllergens, selectedTags, searchQuery]);
+  }, [selectedCategory, selectedSubcategory, selectedAllergens, selectedTags, searchQuery, selectedMenu, menuItems]);
+
 
   const toggleAllergen = (allergen: string) => {
     setSelectedAllergens(prev =>
@@ -132,6 +169,10 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
   };
 
   const currentCategories = (isAlacarteMode ? alacarteCategories : rodizioCategories).filter(cat => !cat.name.toUpperCase().includes('SISTEMA'));
+
+  const activeCategories = currentCategories.filter(category => 
+      filteredItems.some(item => item.category === category.id)
+  );
 
   const isScrollingTo = useRef(false);
   const scrollTimeout = useRef<number | null>(null);
@@ -170,11 +211,11 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
       { root: container, rootMargin: '-10px 0px -70% 0px', threshold: 0 }
     );
 
-    const sections = currentCategories.map(c => document.getElementById(`category-${c.id}`)).filter(Boolean);
+    const sections = activeCategories.map(c => document.getElementById(`category-${c.id}`)).filter(Boolean);
     sections.forEach(s => observer.observe(s!));
 
     return () => observer.disconnect();
-  }, [currentCategories, filteredItems, selectedMenu]);
+  }, [activeCategories, filteredItems, selectedMenu]);
 
   const handleCategorySelect = (categoryId: string) => {
     isScrollingTo.current = true;
@@ -205,6 +246,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
         isSearchActive={showSearch}
         onBack={onBackToLanding}
         hasTable={hasTable}
+        isGuestMode={isGuestMode}
       />
 
       {showSearch && (
@@ -230,7 +272,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
           <CategoryCarousel
             selectedCategory={selectedCategory}
             onSelectCategory={handleCategorySelect}
-            categories={currentCategories}
+            categories={activeCategories}
             vertical={true}
           />
         </div>
@@ -240,7 +282,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
           {/* Products List - Vertical Continuous Layout */}
           <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-4 pb-32 no-scrollbar scroll-smooth" id="menu-scroll-container">
             <div className="max-w-4xl mx-auto space-y-12">
-              {currentCategories.map(category => {
+              {activeCategories.map(category => {
                   const catItems = filteredItems.filter(i => i.category === category.id);
                   if (catItems.length === 0) return null;
                   
@@ -260,6 +302,7 @@ export function MenuScreen({ initialCategory, initialMenu = 'menu', onNavigateTo
                                   onClick={() => setDetailsItem(item)}
                                   hasTable={hasTable}
                                   variant={variant}
+                                  isGuestMode={isGuestMode}
                                 />
                               ))}
                           </div>

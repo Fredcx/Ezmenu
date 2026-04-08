@@ -17,7 +17,9 @@ export function ServiceScreen() {
     const [activeRequest, setActiveRequest] = useState<string | null>(null);
     const [cooldown, setCooldown] = useState(0);
     const [history, setHistory] = useState<any[]>([]);
-    const { callService, establishmentId, session } = useOrder();
+    const [askObs, setAskObs] = useState(false);
+    const [obsText, setObsText] = useState('');
+    const { callService, establishmentId, session, isTableOccupiedByMe } = useOrder();
 
     const fetchHistory = async () => {
         const tableId = localStorage.getItem('ez_menu_table_name');
@@ -96,15 +98,21 @@ export function ServiceScreen() {
         }
     ];
 
-    const handleRequest = async (id: string) => {
+    const handleRequest = async (id: string, obs?: string) => {
+        if (!isTableOccupiedByMe) {
+            toast.error('Por favor, ocupe a mesa na tela de Início antes de chamar o garçom!');
+            return;
+        }
         if (cooldown > 0) {
             toast.error(`Aguarde ${cooldown}s antes de chamar novamente.`);
             return;
         }
 
         setActiveRequest(id);
-        await callService(id as 'waiter' | 'machine');
+        await callService(id as 'waiter' | 'machine', obs);
         
+        setAskObs(false);
+        setObsText('');
         localStorage.setItem('ez_menu_last_service_call', Date.now().toString());
         setCooldown(60);
 
@@ -127,40 +135,68 @@ export function ServiceScreen() {
                 {/* Primary Action */}
                 <div className="flex flex-col items-center">
                 {options.map((option) => (
-                    <button
-                        key={option.id}
-                        onClick={() => handleRequest(option.id)}
-                        disabled={activeRequest !== null || cooldown > 0}
-                        className={`
-                            group relative w-full max-w-sm overflow-hidden py-8 rounded-[2.5rem]
-                            transition-all duration-500 flex items-center px-10 gap-6 glass-card
-                            ${activeRequest === option.id ? 'scale-95 border-primary/50' : 'md:hover:scale-105 active:scale-95 hover:border-primary/30'}
-                            ${(activeRequest && activeRequest !== option.id) || cooldown > 0 ? 'opacity-50 grayscale' : ''}
-                        `}
-                    >
-                        <div className={`
-                            w-20 h-20 rounded-2xl bg-gradient-to-br transition-transform duration-500
-                            ${option.bgGradient} flex items-center justify-center shadow-lg
-                            group-hover:rotate-6
-                        `}>
-                            <option.icon className={`w-10 h-10 ${option.color}`} />
-                        </div>
+                    <div key={option.id} className="w-full max-w-sm flex flex-col gap-3">
+                        <button
+                            onClick={() => {
+                                if (option.id === 'waiter') {
+                                    setAskObs(!askObs);
+                                } else {
+                                    handleRequest(option.id);
+                                }
+                            }}
+                            disabled={activeRequest !== null || cooldown > 0}
+                            className={`
+                                group relative w-full overflow-hidden py-8 rounded-[2.5rem]
+                                transition-all duration-500 flex items-center px-10 gap-6 glass-card
+                                ${activeRequest === option.id ? 'scale-95 border-primary/50' : 'md:hover:scale-105 active:scale-95 hover:border-primary/30'}
+                                ${(activeRequest && activeRequest !== option.id) || cooldown > 0 ? 'opacity-50 grayscale' : ''}
+                            `}
+                        >
+                            <div className={`
+                                w-20 h-20 rounded-2xl bg-gradient-to-br transition-transform duration-500
+                                ${option.bgGradient} flex items-center justify-center shadow-lg
+                                group-hover:rotate-6
+                            `}>
+                                <option.icon className={`w-10 h-10 ${option.color}`} />
+                            </div>
 
-                        <div className="flex-1 text-left">
-                            <span className="block text-xl font-black uppercase tracking-tight text-foreground">{option.label}</span>
-                            <span className={`block text-xs font-bold uppercase tracking-widest leading-none mt-1 opacity-80 ${cooldown > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
-                                {activeRequest === option.id ? 'Chamando...' : cooldown > 0 ? `Aguarde ${cooldown}s...` : option.description}
-                            </span>
-                        </div>
+                            <div className="flex-1 text-left">
+                                <span className="block text-xl font-black uppercase tracking-tight text-foreground">{option.label}</span>
+                                <span className={`block text-xs font-bold uppercase tracking-widest leading-none mt-1 opacity-80 ${cooldown > 0 ? 'text-red-500' : 'text-muted-foreground'}`}>
+                                    {activeRequest === option.id ? 'Chamando...' : cooldown > 0 ? `Aguarde ${cooldown}s...` : option.description}
+                                </span>
+                            </div>
 
-                        {activeRequest === option.id ? (
-                            <Check className="w-8 h-8 text-green-500 animate-in zoom-in duration-300" />
-                        ) : cooldown > 0 ? (
-                            <Clock className="w-6 h-6 text-red-500/50" />
-                        ) : (
-                            <ChevronRight className="w-6 h-6 text-muted-foreground opacity-30 group-hover:translate-x-1 group-hover:opacity-100 transition-all" />
+                            {activeRequest === option.id ? (
+                                <Check className="w-8 h-8 text-green-500 animate-in zoom-in duration-300" />
+                            ) : cooldown > 0 ? (
+                                <Clock className="w-6 h-6 text-red-500/50" />
+                            ) : (
+                                <ChevronRight className={`w-6 h-6 text-muted-foreground transition-all duration-300 ${askObs && option.id === 'waiter' ? 'rotate-90 opacity-100' : 'opacity-30 group-hover:translate-x-1 group-hover:opacity-100'}`} />
+                            )}
+                        </button>
+                        
+                        {/* Observation Input Panel */}
+                        {askObs && option.id === 'waiter' && cooldown === 0 && (
+                            <div className="animate-in slide-in-from-top-4 fade-in duration-300 bg-card border border-border rounded-[2rem] p-5 shadow-sm space-y-3">
+                                <p className="text-sm font-bold text-foreground">Alguma observação?</p>
+                                <input
+                                    type="text"
+                                    placeholder="Ex: Senha do Wi-Fi, Limpar a mesa..."
+                                    value={obsText}
+                                    onChange={(e) => setObsText(e.target.value)}
+                                    maxLength={50}
+                                    className="w-full bg-secondary/50 border border-border rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-primary/50"
+                                />
+                                <button
+                                    onClick={() => handleRequest(option.id, obsText)}
+                                    className="w-full bg-primary text-primary-foreground font-black uppercase tracking-wider text-sm py-3.5 rounded-xl hover:opacity-90 active:scale-[0.98] transition-all"
+                                >
+                                    Confirmar Chamado
+                                </button>
+                            </div>
                         )}
-                    </button>
+                    </div>
                 ))}
                 </div>
 

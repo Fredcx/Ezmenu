@@ -5,15 +5,23 @@ import { supabase } from '@/lib/supabase';
 import { BrandingLogo } from './BrandingLogo';
 
 interface AccessScreenProps {
-    onAccessGranted: (name: string, email: string) => void;
+    onGranted: (name: string, email: string) => void;
+    hasTable?: boolean;
+    isLoading?: boolean;
 }
 
-export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) => {
+export const AccessScreen: React.FC<AccessScreenProps> = ({ onGranted, hasTable = false, isLoading: isParentLoading = false }) => {
+
     const [mode, setMode] = useState<'login' | 'register'>('login');
     const [name, setName] = useState('');
     const [email, setEmail] = useState('');
     const [isLoading, setIsLoading] = useState(false);
+    
+    // Combine local and parent loading states
+    const effectiveLoading = isLoading || isParentLoading;
+    
     const [error, setError] = useState('');
+
     const [establishmentId, setEstablishmentId] = useState<string | null>(null);
 
     useEffect(() => {
@@ -62,8 +70,9 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                 const userName = data.full_name || email.split('@')[0];
                 localStorage.setItem('ez_menu_client_name', userName);
                 localStorage.setItem('ez_menu_client_email', email.trim().toLowerCase());
-                onAccessGranted(userName, email.trim().toLowerCase());
+                onGranted(userName, email.trim().toLowerCase());
                 toast.success(`Bem-vindo de volta, ${userName}!`);
+
             } else {
                 setError('');
                 toast.info('E-mail não encontrado. Por favor, crie sua conta.');
@@ -101,8 +110,9 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
             localStorage.setItem('ez_menu_client_name', name.trim());
             localStorage.setItem('ez_menu_client_email', email.trim().toLowerCase());
 
-            onAccessGranted(name.trim(), email.trim().toLowerCase());
+            onGranted(name.trim(), email.trim().toLowerCase());
             toast.success(`Bem-vindo, ${name}! Seu acesso foi liberado.`);
+
         } catch (e: any) {
             console.error("Register error:", e);
             toast.error("Erro ao realizar cadastro.");
@@ -193,12 +203,13 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                     {/* Actions */}
                     <button
                         onClick={mode === 'login' ? handleLogin : handleRegister}
-                        disabled={isLoading}
+                        disabled={effectiveLoading}
                         className="w-full h-14 mt-8 bg-primary text-white font-black uppercase tracking-widest rounded-2xl flex items-center justify-center gap-3 hover:bg-primary/95 active:scale-[0.98] transition-all shadow-[0_8px_25px_rgba(237,27,46,0.25)] hover:shadow-[0_12px_35px_rgba(237,27,46,0.35)] disabled:opacity-50 disabled:pointer-events-none text-sm group overflow-hidden relative"
                     >
                         <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/20 to-transparent -translate-x-[200%] group-hover:translate-x-[200%] transition-transform duration-1000" />
                         <div className="relative flex items-center gap-2">
-                            {isLoading ? (
+                            {effectiveLoading ? (
+
                                 <Loader2 className="w-5 h-5 animate-spin" />
                             ) : (
                                 <>
@@ -226,23 +237,7 @@ export const AccessScreen: React.FC<AccessScreenProps> = ({ onAccessGranted }) =
                         </button>
                     </div>
                 </div>
-
-                <div className="mt-8 flex flex-col items-center gap-4">
-                    <div className="w-full flex items-center gap-4 px-8 opacity-40">
-                        <div className="h-px flex-1 bg-neutral-400" />
-                        <span className="text-[9px] font-black text-neutral-500 uppercase tracking-[0.3em]">ou</span>
-                        <div className="h-px flex-1 bg-neutral-400" />
-                    </div>
-
-                    <button
-                        onClick={() => onAccessGranted('Visitante', '')}
-                        className="text-[10px] font-black uppercase tracking-[0.2em] text-neutral-500 hover:text-neutral-900 transition-all py-3 px-6 hover:bg-white border border-transparent hover:border-black/5 hover:shadow-sm rounded-xl active:scale-95"
-                    >
-                        Continuar sem conta
-                    </button>
-                </div>
             </div>
-
         </div>
     );
 };

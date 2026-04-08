@@ -29,6 +29,9 @@ export function StaffTables() {
     const [activeTab, setActiveTab] = useState<'info' | 'orders'>('info');
     const [showCheckout, setShowCheckout] = useState(false);
     const [showRodizioModal, setShowRodizioModal] = useState(false);
+    const [menuSearch, setMenuSearch] = useState('');
+    const [confirmCheckoutMethod, setConfirmCheckoutMethod] = useState<'credit' | 'debit' | 'cash' | 'app' | null>(null);
+    const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
     useEffect(() => {
         const interval = setInterval(() => setCurrentTime(Date.now()), 1000);
@@ -49,8 +52,8 @@ export function StaffTables() {
 
             const [tablesRes, ordersRes, menuRes] = await Promise.all([
                  supabase.from('restaurant_tables').select('*').eq('establishment_id', currentId).is('is_label', false),
-                 supabase.from('orders').select('*, order_items(*, menu_items(*))').eq('establishment_id', currentId).neq('status', 'paid').neq('status', 'cancelled').not('status', 'ilike', 'archived%'),
-                 supabase.from('menu_items').select('*').eq('establishment_id', currentId).ilike('code', 'SYS%')
+                 supabase.from('orders').select('*, order_items(*, menu_items(*))').eq('establishment_id', currentId).neq('status', 'cancelled').not('status', 'ilike', 'archived%'),
+                 supabase.from('menu_items').select('*, categories(id, name)').eq('establishment_id', currentId).order('name')
             ]);
 
             if (tablesRes.data) {
@@ -145,9 +148,9 @@ export function StaffTables() {
                 quantity: qty,
                 price: menuItem.price,
                 status: 'pending',
-                notes: 'Lançamento Manual',
                 observation: ''
             });
+
             if (itemErr) throw itemErr;
 
             await supabase.from('restaurant_tables').update({ 
@@ -174,10 +177,14 @@ export function StaffTables() {
              }
  
              await supabase.from('restaurant_tables').update({ status: 'free', last_activity_at: null, occupants: [] }).eq('id', selectedTableId);
+             if (establishmentId) {
+                await supabase.from('service_requests').update({ status: 'archived' }).eq('table_id', selectedTableId).eq('establishment_id', establishmentId);
+             }
              
              toast.success(`Mesa ${selectedTableId} paga via ${method}! Encerrada.`);
              setSelectedTableId(null);
              setShowCheckout(false);
+             setConfirmCheckoutMethod(null);
              fetchData();
         } catch (e) {
             toast.error('Erro ao encerrar mesa');
@@ -187,6 +194,7 @@ export function StaffTables() {
     const selectedTable = tables.find(t => t.id === selectedTableId);
     const metrics = selectedTableId ? getTableMetrics(selectedTableId) : null;
     const items = selectedTableId ? getOrderedItems(selectedTableId) : [];
+    const uniqueCustomers = Array.from(new Set(items.map(i => i._author))).filter(c => c && c !== 'Garçom (Lançamento)' && c !== 'Mesa');
 
     // Filter out old tables
     const displayTables = tables.filter(t => !t.id.startsWith('DIV_') && !t.id.startsWith('LABEL_')).sort((a,b) => {
@@ -258,7 +266,7 @@ export function StaffTables() {
                                 </div>
                                 <h3 className="text-3xl font-black text-white tracking-tighter truncate">Mesa {selectedTable.id}</h3>
                             </div>
-                            <button onClick={() => { setSelectedTableId(null); setShowCheckout(false); setShowRodizioModal(false); }} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0 active:scale-95 transition-transform">
+                            <button onClick={() => { setSelectedTableId(null); setShowCheckout(false); setShowRodizioModal(false); setConfirmCheckoutMethod(null); setMenuSearch(''); setSelectedCategory(null); }} className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center text-white shrink-0 active:scale-95 transition-transform">
                                 <X className="w-5 h-5" />
                             </button>
                         </div>
@@ -289,6 +297,20 @@ export function StaffTables() {
                                             </div>
                                         </div>
 
+                                        {uniqueCustomers.length > 0 && (
+                                            <div className="bg-white rounded-3xl p-5 shadow-sm border border-zinc-100">
+                                                <h4 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-3 text-center">Contas Conectadas</h4>
+                                                <div className="flex flex-wrap gap-2 justify-center">
+                                                    {uniqueCustomers.map((c, i) => (
+                                                        <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-50 border border-zinc-100 rounded-xl text-xs font-bold text-zinc-700">
+                                                            <Users className="w-3.5 h-3.5 text-zinc-400" />
+                                                            {c as string}
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        )}
+
                                         <button 
                                             onClick={() => setShowRodizioModal(true)}
                                             className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl bg-zinc-100 text-zinc-900 font-bold border border-zinc-200 active:scale-95 transition-transform"
@@ -305,7 +327,7 @@ export function StaffTables() {
                                                 </div>
                                                 <div className="flex-1 min-w-0">
                                                     <p className={`font-bold text-sm truncate ${item.status === 'cancelled' ? 'line-through text-red-500' : 'text-zinc-900'}`}>{item.menu_items?.name}</p>
-                                                    <p className="text-[10px] text-zinc-400 font-bold">R$ {(item.price * item.quantity).toFixed(2)} · {new Date(item._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                                                    <p className="text-[10px] text-zinc-400 font-bold">R$ {(item.price * item.quantity).toFixed(2)} · {new Date(item._time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} · <span className="text-zinc-600">{item._author}</span></p>
                                                 </div>
                                                 {item.status !== 'cancelled' && (
                                                     <button 
@@ -362,28 +384,72 @@ export function StaffTables() {
             {showRodizioModal && (
                 <div className="fixed inset-0 z-[110] bg-black/60 backdrop-blur-sm flex items-end sm:items-center justify-center animate-in fade-in duration-200">
                     <div className="bg-white w-full sm:w-[400px] h-[80vh] sm:h-[600px] sm:rounded-3xl rounded-t-3xl overflow-hidden flex flex-col animate-in slide-in-from-bottom-8 duration-300">
-                        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50">
-                            <h4 className="font-black text-lg text-zinc-900">Lançamento Direto</h4>
-                            <button onClick={() => setShowRodizioModal(false)} className="p-2 bg-white rounded-full border border-zinc-200 text-zinc-500"><X className="w-4 h-4" /></button>
+                        <div className="px-5 py-4 border-b border-zinc-100 flex items-center justify-between bg-zinc-50 shrink-0">
+                            <h4 className="font-black text-lg text-zinc-900">Lançar Item</h4>
+                            <button onClick={() => { setShowRodizioModal(false); setMenuSearch(''); setSelectedCategory(null); }} className="p-2 bg-white rounded-full border border-zinc-200 text-zinc-500"><X className="w-4 h-4" /></button>
                         </div>
-                        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-                            <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest px-1 mb-2">Selecione o Rodízio</p>
-                            {menuItems.map(m => (
-                                <div key={m.id} className="bg-white border border-zinc-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
-                                    <div>
-                                        <p className="font-bold text-sm text-zinc-900">{m.name}</p>
-                                        <p className="text-emerald-600 font-bold text-xs">R$ {m.price.toFixed(2)}</p>
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => addManualRodizio(m, 1)} className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 1</button>
-                                        <button onClick={() => addManualRodizio(m, 2)} className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 2</button>
-                                    </div>
-                                </div>
-                            ))}
-                            {menuItems.length === 0 && (
-                                <p className="text-center text-zinc-400 text-sm py-10 font-medium">Nenhum rodízio cadastrado no cardápio.</p>
-                            )}
+                        <div className="px-5 pt-4 pb-2 border-b border-zinc-100 bg-white shrink-0">
+                            <input 
+                                type="text" 
+                                placeholder="Buscar itens ex: Coca, Sushi..." 
+                                value={menuSearch}
+                                onChange={e => setMenuSearch(e.target.value)}
+                                className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-zinc-900 transition-all"
+                            />
                         </div>
+                        
+                        {(() => {
+                            const allCategories = Array.from(new Set(menuItems.map(m => Array.isArray(m.categories) ? m.categories[0]?.name : m.categories?.name).filter(Boolean)));
+                            return (
+                                <>
+                                    {!menuSearch && allCategories.length > 0 && (
+                                        <div className="flex overflow-x-auto gap-2 px-5 py-3 border-b border-zinc-100 bg-zinc-50 hide-scrollbar shrink-0">
+                                            <button 
+                                                onClick={() => setSelectedCategory(null)}
+                                                className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all ${!selectedCategory ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600'}`}
+                                            >
+                                                Principais
+                                            </button>
+                                            {allCategories.map(cat => (
+                                                <button 
+                                                    key={cat as string}
+                                                    onClick={() => setSelectedCategory(cat as string)}
+                                                    className={`whitespace-nowrap px-4 py-2 rounded-xl text-xs font-bold transition-all ${selectedCategory === cat ? 'bg-zinc-900 text-white' : 'bg-white border border-zinc-200 text-zinc-600'}`}
+                                                >
+                                                    {cat as string}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                    <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                                        <p className="text-xs font-bold text-zinc-400 uppercase tracking-widest px-1 mb-2">{menuSearch ? 'Resultados da Pesquisa' : (selectedCategory || 'Rodízios Adicionais')}</p>
+                                        {(() => {
+                                            const filtered = menuItems.filter(m => {
+                                                if (menuSearch) return m.name.toLowerCase().includes(menuSearch.toLowerCase());
+                                                if (selectedCategory) {
+                                                    const cName = Array.isArray(m.categories) ? m.categories[0]?.name : m.categories?.name;
+                                                    return cName === selectedCategory;
+                                                }
+                                                return m.code?.startsWith('SYS');
+                                            });
+                                            if (filtered.length === 0) return <p className="text-center text-zinc-400 text-sm py-10 font-medium">Nenhum item encontrado.</p>;
+                                            return filtered.map(m => (
+                                                <div key={m.id} className="bg-white border border-zinc-200 p-4 rounded-2xl flex items-center justify-between shadow-sm">
+                                                    <div>
+                                                        <p className="font-bold text-sm text-zinc-900">{m.name}</p>
+                                                        <p className="text-emerald-600 font-bold text-xs">R$ {m.price.toFixed(2)}</p>
+                                                    </div>
+                                                    <div className="flex gap-2">
+                                                        <button onClick={() => addManualRodizio(m, 1)} className="px-4 py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 1</button>
+                                                        <button onClick={() => addManualRodizio(m, 2)} className="px-4 py-2 bg-zinc-100 text-zinc-900 rounded-xl text-xs font-bold active:scale-95 transition-transform">+ 2</button>
+                                                    </div>
+                                                </div>
+                                            ));
+                                        })()}
+                                    </div>
+                                </>
+                            );
+                        })()}
                     </div>
                 </div>
             )}
@@ -397,7 +463,7 @@ export function StaffTables() {
                                 <h4 className="font-black text-2xl text-zinc-900 mb-1">Pagamento</h4>
                                 <p className="text-sm font-bold text-zinc-500">Mesa {selectedTableId}</p>
                             </div>
-                            <button onClick={() => setShowCheckout(false)} className="w-8 h-8 flex items-center justify-center bg-zinc-100 rounded-full text-zinc-500"><X className="w-4 h-4" /></button>
+                            <button onClick={() => { setShowCheckout(false); setConfirmCheckoutMethod(null); }} className="w-8 h-8 flex items-center justify-center bg-zinc-100 rounded-full text-zinc-500"><X className="w-4 h-4" /></button>
                         </div>
                         
                         <div className="bg-zinc-50 rounded-2xl p-5 mb-6 text-center border border-zinc-200">
@@ -405,16 +471,29 @@ export function StaffTables() {
                             <p className="text-4xl font-black text-emerald-600 tracking-tighter">R$ {metrics?.total.toFixed(2)}</p>
                         </div>
 
-                        <div className="space-y-3">
-                            <button onClick={() => completeCheckout('credit')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
-                                <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0"><CreditCard className="w-6 h-6" /></div>
-                                <div><p className="font-black text-zinc-900 text-lg">Maquininha</p><p className="text-xs font-bold text-zinc-500">Crédito ou Débito</p></div>
-                            </button>
-                            <button onClick={() => completeCheckout('cash')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
-                                <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0"><Banknote className="w-6 h-6" /></div>
-                                <div><p className="font-black text-zinc-900 text-lg">Dinheiro</p><p className="text-xs font-bold text-zinc-500">Pagamento em espécie</p></div>
-                            </button>
-                        </div>
+                        {!confirmCheckoutMethod ? (
+                            <div className="space-y-3">
+                                <button onClick={() => setConfirmCheckoutMethod('credit')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
+                                    <div className="w-12 h-12 rounded-xl bg-zinc-100 flex items-center justify-center text-zinc-900 shrink-0"><CreditCard className="w-6 h-6" /></div>
+                                    <div><p className="font-black text-zinc-900 text-lg">Maquininha</p><p className="text-xs font-bold text-zinc-500">Crédito ou Débito</p></div>
+                                </button>
+                                <button onClick={() => setConfirmCheckoutMethod('cash')} className="w-full flex items-center gap-4 bg-white border-2 border-zinc-200 p-4 rounded-2xl hover:border-zinc-900 active:scale-95 transition-all text-left">
+                                    <div className="w-12 h-12 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600 shrink-0"><Banknote className="w-6 h-6" /></div>
+                                    <div><p className="font-black text-zinc-900 text-lg">Dinheiro</p><p className="text-xs font-bold text-zinc-500">Pagamento em espécie</p></div>
+                                </button>
+                            </div>
+                        ) : (
+                            <div className="space-y-3 animate-in fade-in zoom-in-95 duration-200">
+                                <div className="bg-red-50 text-red-900 p-4 rounded-2xl text-center mb-4 border border-red-100">
+                                    <p className="font-bold text-sm">Tem certeza?</p>
+                                    <p className="text-xs mt-1">Ao confirmar, a conta será fechada como paga via {confirmCheckoutMethod === 'credit' ? 'Maquininha' : 'Dinheiro'}. Esta ação não pode ser desfeita!</p>
+                                </div>
+                                <div className="flex gap-3">
+                                    <button onClick={() => setConfirmCheckoutMethod(null)} className="flex-1 py-3.5 rounded-xl border-2 border-zinc-200 text-zinc-600 font-bold active:scale-95 transition-transform bg-white">Cancelar</button>
+                                    <button onClick={() => completeCheckout(confirmCheckoutMethod)} className="flex-1 py-3.5 rounded-xl bg-emerald-500 text-white font-bold shadow-lg shadow-emerald-500/20 active:scale-95 transition-transform">Sim, Fechar</button>
+                                </div>
+                            </div>
+                        )}
                     </div>
                 </div>
             )}

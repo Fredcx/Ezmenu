@@ -13,8 +13,9 @@ interface ProductCardProps {
   onClick?: () => void;
   hasTable?: boolean;
   variant?: 'default' | 'premium';
+  isGuestMode?: boolean;
 }
-export function ProductCard({ item, isAlacarte = false, onClick, hasTable = false, variant = 'default' }: ProductCardProps) {
+export function ProductCard({ item, isAlacarte = false, onClick, hasTable = false, variant = 'default', isGuestMode = false }: ProductCardProps) {
   const { checkAvailability } = useInventory();
 
   const {
@@ -44,7 +45,7 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
   const isOutOfStock = availability === 'out_of_stock';
   const isLowStock = availability === 'low_stock';
 
-  const displayAsRodizio = item.isRodizio && hasActiveRodizio;
+  const displayAsRodizio = !isAlacarte || (item.isRodizio && hasActiveRodizio);
   const effectiveIsRodizio = item.isRodizio && hasActiveRodizio;
   const isBlocked = isOutOfStock || !hasTable || (effectiveIsRodizio && isRoundLimitReached && quantity === 0);
 
@@ -77,7 +78,7 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
     // Rodizio safety check: can't add rodizio item if don't have the pass
     if (!isAlacarte && item.isRodizio && !hasActiveRodizio) {
       toast.error('Ative o Rodízio primeiro!', {
-        description: 'Vá no Início e selecione a quantidade de pessoas para liberar os itens.',
+        description: 'Chame um garçom para adicionar o Rodízio à sua mesa.',
         duration: 4000
       });
       return;
@@ -193,7 +194,7 @@ export function ProductCard({ item, isAlacarte = false, onClick, hasTable = fals
           </div>
 
           {/* Quantity/Add Controls - Positioned consistently below the image */}
-          {hasTable && (
+          {hasTable && !isGuestMode && (
             <div className={isPremium ? "pr-1" : "pr-0"}>
               {quantity > 0 ? (
                 <div className="flex items-center bg-white/95 backdrop-blur-md rounded-2xl border border-border shadow-premium overflow-hidden h-10 animate-in slide-in-from-right-2 duration-300">

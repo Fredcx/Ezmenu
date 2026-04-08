@@ -10,6 +10,7 @@ interface ServiceRequest {
     tableId: string;
     timestamp: number;
     status: string;
+    userName?: string;
 }
 
 export function StaffRequests() {
@@ -37,7 +38,8 @@ export function StaffRequests() {
                 type: r.type,
                 tableId: r.table_id,
                 timestamp: new Date(r.created_at).getTime(),
-                status: r.status
+                status: r.status,
+                userName: r.user_name
             })));
         }
     }, []);
@@ -108,7 +110,13 @@ export function StaffRequests() {
                                 <p className="text-sm font-bold text-zinc-800">
                                     {req.type === 'machine' ? 'Levar Maquininha' : 'Chamar Garçom'}
                                 </p>
-                                <p className="text-xs font-semibold text-zinc-400 mt-0.5">Vá até a mesa para atender</p>
+                                {req.userName && req.userName.startsWith('Obs:') ? (
+                                    <p className="text-xs font-bold text-zinc-900 mt-1 bg-yellow-300/40 px-2 py-0.5 rounded inline-block border border-yellow-400/50">
+                                        {req.userName}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs font-semibold text-zinc-400 mt-0.5">Vá até a mesa para atender</p>
+                                )}
                             </div>
                         </div>
 
